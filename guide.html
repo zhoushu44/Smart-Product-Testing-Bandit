@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>原理与教程 · 多臂老虎机测款</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B0F14; --bg-2:#11171F; --panel:#151C26; --panel-2:#1B2430;
+    --border:#243140; --border-hi:#2F3D52;
+    --text:#E6EDF5; --muted:#8A98AC; --dim:#5C6B7E;
+    --cyan:#22D3EE; --green:#34D399; --red:#F87171; --amber:#FBBF24;
+    --r:12px;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --disp:'Sora','Noto Sans SC',sans-serif;
+    --body:'Noto Sans SC','Sora',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.7}
+  body{background:radial-gradient(1200px 600px at 80% -10%, rgba(34,211,238,.08), transparent 60%),radial-gradient(900px 500px at -10% 110%, rgba(52,211,153,.05), transparent 55%),var(--bg);min-height:100vh}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:var(--bg-2)}
+  ::-webkit-scrollbar-thumb{background:var(--border-hi);border-radius:6px}
+  .wrap{max-width:960px;margin:0 auto;padding:24px 28px 80px}
+
+  /* Nav */
+  .nav{display:flex;gap:10px;margin-bottom:28px}
+  .nav a{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;background:var(--panel);border:1px solid var(--border);color:var(--muted);text-decoration:none;font-family:var(--disp);font-weight:600;font-size:13px;transition:.15s}
+  .nav a:hover{border-color:var(--cyan);color:var(--text)}
+  .nav a.active{background:rgba(34,211,238,.12);border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 16px rgba(34,211,238,.15)}
+
+  /* Brand */
+  .brand{display:flex;align-items:center;gap:14px;margin-bottom:32px}
+  .logo{width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#22D3EE,#0E7490 60%,#1B2430);display:grid;place-items:center;font-family:var(--disp);font-weight:800;color:#06121A;font-size:20px;box-shadow:0 0 20px rgba(34,211,238,.3)}
+  .brand h1{margin:0;font-family:var(--disp);font-weight:800;font-size:24px}
+  .brand .sub{color:var(--muted);font-size:13px;margin-top:3px}
+
+  /* Sections */
+  h2{font-family:var(--disp);font-weight:800;font-size:20px;margin:36px 0 16px;padding-bottom:10px;border-bottom:2px solid var(--border);display:flex;align-items:center;gap:10px}
+  h2 .ico{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;font-size:16px;flex-shrink:0}
+  h3{font-family:var(--disp);font-weight:700;font-size:16px;margin:24px 0 10px;color:var(--cyan)}
+  h4{font-family:var(--disp);font-weight:600;font-size:14px;margin:18px 0 8px;color:var(--amber)}
+
+  /* Cards */
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:16px}
+  .card.highlight{border-color:var(--cyan);box-shadow:0 0 20px rgba(34,211,238,.08)}
+
+  /* Flow */
+  .flow{display:flex;flex-direction:column;gap:0;position:relative;padding-left:28px}
+  .flow::before{content:'';position:absolute;left:11px;top:8px;bottom:8px;width:2px;background:var(--border)}
+  .flow-step{position:relative;padding:10px 0 10px 20px}
+  .flow-step::before{content:'';position:absolute;left:-22px;top:16px;width:14px;height:14px;border-radius:50%;border:2px solid var(--cyan);background:var(--bg)}
+  .flow-step.stop::before{border-color:var(--red);background:rgba(248,113,113,.2)}
+  .flow-step.go::before{border-color:var(--green);background:rgba(52,211,153,.2)}
+  .flow-step.try::before{border-color:var(--amber);background:rgba(251,191,36,.2)}
+  .flow-step .tag{display:inline-block;font-family:var(--disp);font-weight:700;font-size:11px;padding:2px 8px;border-radius:5px;margin-right:8px}
+  .flow-step .tag.elim{background:rgba(248,113,113,.15);color:var(--red)}
+  .flow-step .tag.lower{background:rgba(251,191,36,.15);color:var(--amber)}
+  .flow-step .tag.keep{background:rgba(34,211,238,.15);color:var(--cyan)}
+  .flow-step .tag.go{background:rgba(52,211,153,.15);color:var(--green)}
+
+  /* Funnel visual */
+  .funnel{display:flex;flex-direction:column;gap:4px;margin:16px 0}
+  .funnel-row{display:flex;align-items:center;gap:12px}
+  .funnel-bar{height:40px;border-radius:8px;display:grid;place-items:center;font-family:var(--disp);font-weight:700;font-size:13px;color:#fff;transition:.3s}
+  .funnel-label{font-size:12px;color:var(--muted);min-width:120px;text-align:right}
+
+  /* Comparison table */
+  table.cmp{width:100%;border-collapse:collapse;font-size:14px;margin:12px 0}
+  table.cmp th{background:var(--panel-2);color:var(--muted);font-family:var(--mono);font-weight:500;font-size:11px;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.4px}
+  table.cmp td{padding:10px 14px;border-bottom:1px solid rgba(36,49,64,.5);vertical-align:top}
+  table.cmp tr:hover{background:rgba(34,211,238,.04)}
+
+  /* Code/Formula */
+  .formula{font-family:var(--mono);font-size:13px;background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin:10px 0;color:var(--cyan);overflow-x:auto}
+  .note{background:rgba(34,211,238,.06);border-left:3px solid var(--cyan);padding:10px 14px;border-radius:0 8px 8px 0;font-size:13px;margin:12px 0}
+  .warn{background:rgba(251,191,36,.08);border-left:3px solid var(--amber);padding:10px 14px;border-radius:0 8px 8px 0;font-size:13px;margin:12px 0}
+  .danger{background:rgba(248,113,113,.08);border-left:3px solid var(--red);padding:10px 14px;border-radius:0 8px 8px 0;font-size:13px;margin:12px 0}
+
+  /* Step-by-step */
+  .steps{counter-reset:step;margin:16px 0}
+  .steps .step{counter-increment:step;display:flex;gap:14px;margin-bottom:18px;align-items:flex-start}
+  .steps .step::before{content:counter(step);display:grid;place-items:center;flex-shrink:0;width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),#0E7490);color:#06121A;font-family:var(--disp);font-weight:800;font-size:14px}
+  .steps .step .content{flex:1}
+  .steps .step .content b{color:var(--cyan)}
+
+  /* Tag chips */
+  .chip{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-family:var(--disp);font-weight:600;font-size:11px}
+  .chip.green{background:rgba(52,211,153,.15);color:var(--green)}
+  .chip.cyan{background:rgba(34,211,238,.15);color:var(--cyan)}
+  .chip.amber{background:rgba(251,191,36,.15);color:var(--amber)}
+  .chip.red{background:rgba(248,113,113,.15);color:var(--red)}
+
+  /* FAQ */
+  .faq{margin:12px 0}
+  .faq q{display:block;font-weight:700;color:var(--text);margin-bottom:6px;font-style:normal}
+  .faq a{color:var(--muted);text-decoration:none;display:block;padding-left:0}
+
+  p{margin:8px 0}
+  ul{margin:8px 0;padding-left:20px}
+  li{margin:4px 0}
+  strong{color:var(--text)}
+  .muted{color:var(--muted)}
+
+  @media(max-width:700px){
+    .wrap{padding:16px 14px 60px}
+    h2{font-size:17px}
+    table.cmp{font-size:12px}
+    table.cmp th,table.cmp td{padding:8px 10px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Nav -->
+  <div class="nav">
+    <a href="index.html">← 测款工作台</a>
+    <a href="guide.html" class="active">📖 原理与教程</a>
+  </div>
+
+  <!-- Brand -->
+  <div class="brand">
+    <div class="logo">MAB</div>
+    <div>
+      <h1>原理与教程</h1>
+      <div class="sub">多臂老虎机测款 · 你需要知道的一切</div>
+    </div>
+  </div>
+
+  <!-- ========== Section 1: What ========== -->
+  <h2><span class="ico" style="background:rgba(34,211,238,.15)">🎯</span> 这是什么？</h2>
+
+  <div class="card">
+    <p><strong>多臂老虎机 (Multi-Armed Bandit, MAB)</strong> 是一种在"探索与利用"之间做最优权衡的算法。</p>
+    <p>在测款场景里：</p>
+    <ul>
+      <li><strong>臂 (Arm)</strong> = 每一个商品ID</li>
+      <li><strong>拉臂 (Pull)</strong> = 花一次推广费</li>
+      <li><strong>奖励 (Reward)</strong> = ROI（投产比）</li>
+      <li><strong>目标</strong> = 用最少的钱，最快找到达标的款，淘汰不达标的款</li>
+    </ul>
+
+    <div class="note">
+      核心思想：<strong>不是每款花一样的钱去测</strong>，而是快速淘汰差的、把钱集中给好的。
+    </div>
+  </div>
+
+  <!-- ========== Section 2: Why ========== -->
+  <h2><span class="ico" style="background:rgba(52,211,153,.15)">💰</span> 为什么省钱？</h2>
+
+  <div class="card">
+    <h3>传统做法 vs 多臂老虎机</h3>
+
+    <table class="cmp">
+      <tr>
+        <th></th>
+        <th>传统均匀分配</th>
+        <th>多臂老虎机</th>
+      </tr>
+      <tr>
+        <td><strong>预算分配</strong></td>
+        <td>30款各100元/天</td>
+        <td>好款300元/天，差款0元</td>
+      </tr>
+      <tr>
+        <td><strong>淘汰时间</strong></td>
+        <td>跑完7天再人工看</td>
+        <td>第3天自动淘汰</td>
+      </tr>
+      <tr>
+        <td><strong>差款浪费</strong></td>
+        <td>30款×7天都花钱</td>
+        <td>10款第3天就停了</td>
+      </tr>
+      <tr>
+        <td><strong>好款数据量</strong></td>
+        <td>每款100元/天，样本少</td>
+        <td>好款300元/天，样本多</td>
+      </tr>
+      <tr>
+        <td><strong>决策依据</strong></td>
+        <td>看"感觉"</td>
+        <td>统计检验，95%置信</td>
+      </tr>
+    </table>
+
+    <div class="note">
+      <strong>省钱 = 三个维度</strong><br>
+      ① 少浪费 — 差款3天就停<br>
+      ② 多赚钱 — 好款提前拿到更多预算<br>
+      ③ 少误判 — 统计检验不会把好款误杀
+    </div>
+  </div>
+
+  <!-- ========== Section 3: Funnel ========== -->
+  <h2><span class="ico" style="background:rgba(248,113,113,.15)">🔍</span> 淘汰逻辑 · 漏斗五层</h2>
+
+  <div class="card highlight">
+    <p>算法按<strong>展现→点击→成交→ROI</strong>的漏斗，逐层判断每个款该淘汰还是保留：</p>
+
+    <div class="funnel">
+      <div class="funnel-row">
+        <div class="funnel-label">全部测试款</div>
+        <div class="funnel-bar" style="width:100%;background:linear-gradient(90deg,#1B2430,#243140)">N 款进入测试</div>
+      </div>
+      <div class="funnel-row">
+        <div class="funnel-label">第1层: 0展现</div>
+        <div class="funnel-bar" style="width:80%;background:rgba(248,113,113,.25);border:1px solid var(--red)">
+          <span class="chip red">直接淘汰</span> 平台不给流量
+        </div>
+      </div>
+      <div class="funnel-row">
+        <div class="funnel-label">第2层: 烧不动</div>
+        <div class="funnel-bar" style="width:65%;background:rgba(248,113,113,.2);border:1px solid var(--red)">
+          <span class="chip red">直接淘汰</span> 日均<3元=平台不推
+        </div>
+      </div>
+      <div class="funnel-row">
+        <div class="funnel-label">第3层: 0点击</div>
+        <div class="funnel-bar" style="width:50%;background:rgba(248,113,113,.15);border:1px solid var(--red)">
+          <span class="chip red">直接淘汰</span> 主图/标题不行
+        </div>
+      </div>
+      <div class="funnel-row">
+        <div class="funnel-label">第4层: 0成交</div>
+        <div class="funnel-bar" style="width:35%;background:rgba(251,191,36,.15);border:1px solid var(--amber)">
+          <span class="chip amber">降投产试</span> / 超时淘汰
+        </div>
+      </div>
+      <div class="funnel-row">
+        <div class="funnel-label">第5层: CR统计</div>
+        <div class="funnel-bar" style="width:25%;background:rgba(34,211,238,.12);border:1px solid var(--cyan)">
+          <span class="chip cyan">继续测</span> / <span class="chip red">淘汰</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detailed flow -->
+  <div class="card">
+    <h3>完整判定流程</h3>
+
+    <div class="flow">
+      <div class="flow-step stop">
+        <span class="tag elim">淘汰</span>
+        <strong>第1层: 0展现</strong> — 跑了2天以上，展现量为0<br>
+        <span class="muted">原因：平台根本不给这个商品流量，降投产也没用</span><br>
+        <span class="muted">建议：后台暂停该计划</span>
+      </div>
+      <div class="flow-step stop">
+        <span class="tag elim">淘汰</span>
+        <strong>第2层: 烧不动</strong> — 跑了2天以上，日均花费 < 3元<br>
+        <span class="muted">原因：平台不给流量，有1-2笔成交也放量不了，是垃圾款</span><br>
+        <span class="muted">建议：后台暂停该计划</span>
+      </div>
+      <div class="flow-step stop">
+        <span class="tag elim">淘汰</span>
+        <strong>第3层: 0点击 / 低CTR</strong> — 有展现但0点击，或CTR<2%且点击<3次<br>
+        <span class="muted">原因：主图/标题没吸引力，点击成本太高</span><br>
+        <span class="muted">建议：换主图重测或关停</span>
+      </div>
+      <div class="flow-step try">
+        <span class="tag lower">降投产试</span>
+        <strong>第4层: 有点击0成交</strong> — CTR正常但转化=0，测试天数 < 5天<br>
+        <span class="muted">原因：点击没问题，可能是人群太窄/价格偏高</span><br>
+        <span class="muted">建议：投产比 2.19 → 1.53，扩人群看能否出单</span>
+      </div>
+      <div class="flow-step stop">
+        <span class="tag elim">淘汰</span>
+        <strong>第4层: 有点击0成交超时</strong> — 测了5天以上仍然0成交<br>
+        <span class="muted">原因：降投产也救不了，详情页/价格问题太严重</span><br>
+        <span class="muted">建议：后台暂停该计划</span>
+      </div>
+      <div class="flow-step go">
+        <span class="tag go">主推</span>
+        <strong>第5层: P(达标)≥50% 且 后验均值≥目标×60%</strong><br>
+        <span class="muted">原因：统计上有把握这个款能达标</span><br>
+        <span class="muted">建议：加预算放量主推</span>
+      </div>
+      <div class="flow-step">
+        <span class="tag elim">淘汰</span>
+        <strong>第5层: CR统计淘汰</strong> — 与最优臂的置信区间差距显著<br>
+        <span class="muted">原因：即使不确定最优臂达标，也确定这个臂不如最优臂</span><br>
+        <span class="muted">建议：后台暂停，预算给主推款</span>
+      </div>
+      <div class="flow-step">
+        <span class="tag keep">继续测</span>
+        <strong>第5层: 不确定</strong> — 样本不足或把握度不够<br>
+        <span class="muted">原因：还需要更多数据才能判断</span><br>
+        <span class="muted">建议：维持当前设置不变</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Section 4: Algorithm ========== -->
+  <h2><span class="ico" style="background:rgba(34,211,238,.15)">🧮</span> 算法原理</h2>
+
+  <div class="card">
+    <h3>1. 高斯 NIG 后验 (Normal-Inverse-Gamma)</h3>
+    <p>每个商品ID的日ROI被视为从一个<strong>高斯分布</strong>中采样：</p>
+    <div class="formula">ROI_i ~ N(μ, σ²)</div>
+    <p>用 NIG 共轭先验在线更新后验，得到：</p>
+    <ul>
+      <li><strong>后验均值 μ_n</strong>：ROI的最佳估计</li>
+      <li><strong>95%置信区间 [μ_n - t·scale, μ_n + t·scale]</strong>：ROI的不确定性范围</li>
+      <li><strong>P(ROI ≥ 目标)</strong>：达标概率，用于决策</li>
+    </ul>
+    <div class="note">
+      v3用Beta-Bernoulli只看"达标/不达标"，丢失了ROI幅度信息。v4的高斯后验保留了"超目标多少"的信息，决策更准确。
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>2. 时间衰减 (Exponential Decay)</h3>
+    <p>近期的数据权重更高，旧数据权重衰减：</p>
+    <div class="formula">w_t = exp(-λ × (T - t))&emsp;λ=0.15 ≈ 7天半衰期</div>
+    <p>这样如果某款前几天ROI好但最近变差，算法不会被旧数据"掩护"。</p>
+  </div>
+
+  <div class="card">
+    <h3>3. CR 连续淘汰 (Continuous Rejects, NeurIPS 2024)</h3>
+    <p>当多个款都有足够样本时，比较它们的置信区间：</p>
+    <div class="formula">若 bestHi(其他臂上界) - postLo(当前臂下界) > threshold → 淘汰当前臂</div>
+    <p>threshold 由统计显著性 δ=0.05 控制，保证误杀率 ≤5%。</p>
+    <div class="warn">
+      当数据量少（<14天）时，CI极宽，CR判定会很保守，大部分款会被归为"继续测"。这是正确行为——数据不够就不乱判。
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>4. 方差自适应预算分配 (UAI 2023)</h3>
+    <p>预算按"胜率×不确定性"分配：</p>
+    <div class="formula">budget_i = B × [p_i × (1-p_i)] / Σ[p_j × (1-p_j)]</div>
+    <p>越不确定的款分配越多预算（因为更需要数据），已经确定好/差的款预算减少。</p>
+  </div>
+
+  <div class="card">
+    <h3>5. 漂移检测 (Drift Detection)</h3>
+    <p>比较近3天和之前数据的ROI均值：</p>
+    <div class="formula">若 |ROI_近3天 - ROI_之前| > 0.5 → 检测到漂移</div>
+    <p>漂移时算法会降低旧数据权重，防止因环境变化（如大促日）误判。</p>
+  </div>
+
+  <!-- ========== Section 5: Tutorial ========== -->
+  <h2><span class="ico" style="background:rgba(52,211,153,.15)">📋</span> 操作教程</h2>
+
+  <div class="card">
+    <h3>完整测款流程（7天一轮）</h3>
+
+    <div class="steps">
+      <div class="step">
+        <div class="content">
+          <b>第1步：导出数据</b><br>
+          在万相台/直通车后台，导出 <strong>商品推广/全站推广 的分天数据</strong>（Excel格式），时间范围选最近7天。<br>
+          <span class="muted">确保包含列：日期、分组、商品ID、商品名称、总花费、交易额、成交笔数、点击量、曝光量</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="content">
+          <b>第2步：上传 & 设置参数</b><br>
+          打开 <a href="index.html" style="color:var(--cyan)">测款工作台</a>，拖拽上传Excel。<br>
+          核心参数设置：
+          <ul>
+            <li><strong>分组</strong>：选"测试"（只分析测试组的款）</li>
+            <li><strong>目标投产比</strong>：留空自动从出价方式提取，或手动填你的目标</li>
+            <li><strong>淘汰门槛花费</strong>：15-30元（花到这个数才参与淘汰判定）</li>
+            <li><strong>单款预算上限</strong>：100元/天（每个商品ID最多分多少）</li>
+          </ul>
+        </div>
+      </div>
+      <div class="step">
+        <div class="content">
+          <b>第3步：点击"开始测款"</b><br>
+          等待1-2秒，页面显示每个商品ID的判定结果。
+        </div>
+      </div>
+      <div class="step">
+        <div class="content">
+          <b>第4步：看"今日操作清单"</b><br>
+          页面最上方是操作清单，按优先级排列：
+          <ul>
+            <li><span class="chip green">🟢 加预算</span> — 主推款，后台加预算</li>
+            <li><span class="chip red">🔴 关停</span> — 淘汰款，后台暂停计划</li>
+            <li><span class="chip amber">🟠 降投产</span> — 烧不动的款，降投产比试探</li>
+            <li><span class="chip cyan">🟡 维持</span> — 不确定的款，维持不变</li>
+          </ul>
+        </div>
+      </div>
+      <div class="step">
+        <div class="content">
+          <b>第5步：去后台逐个调整</b><br>
+          看"后台调整"列的具体建议，如"投产比 2.19 → 1.53"就去后台改投产比。
+        </div>
+      </div>
+      <div class="step">
+        <div class="content">
+          <b>第6步：7天后重新导数据</b><br>
+          每周重复一次，算法会根据新数据更新判定。随着数据积累，判定会越来越准确。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Section 6: FAQ ========== -->
+  <h2><span class="ico" style="background:rgba(251,191,36,.15)">❓</span> 常见问题</h2>
+
+  <div class="card">
+    <div class="faq">
+      <q>Q: 为什么几乎所有款都是"继续测试"？</q>
+      <a>A: 数据量太少（<14天）时，ROI的置信区间极宽，算法无法做出有把握的判断。这是正确行为——数据不够就不乱判。继续跑几天，CI会收窄，判定会自动变精确。</a>
+    </div>
+    <div class="faq">
+      <q>Q: "烧不动"为什么直接淘汰？有1笔成交也不能救吗？</q>
+      <a>A: 日均花费<3元说明平台不给这个商品流量。即使偶有1-2笔成交，也无法放量——你不可能靠日均2元的推广做出爆款。降投产比也不会让平台多推，因为问题在商品本身（历史表现差/类目竞争大），不在出价。</a>
+    </div>
+    <div class="faq">
+      <q>Q: "降投产试"和"直接淘汰"有什么区别？</q>
+      <a>A: 降投产试 = 这个款CTR没问题（有人点），只是转化不行。降投产比 → 平台放宽人群 → 可能触达更多买家 → 可能出单。给5天观察期，如果还是0成交就淘汰。直接淘汰 = 平台不给流量/主图不行，降投产也没用。</a>
+    </div>
+    <div class="faq">
+      <q>Q: 目标投产比应该填多少？</q>
+      <a>A: 填你该商品的实际保本ROI（扣除退款、运费、成本后）。如果不确定，留空让系统从出价方式自动提取。注意：填太高会导致很多好款被误判为"不达标"，填太低会放过差款。</a>
+    </div>
+    <div class="faq">
+      <q>Q: 数据安全吗？会上传到服务器吗？</q>
+      <a>A: 不会。所有数据只在你本机浏览器中处理，不上传任何服务器。关闭页面后数据即消失。</a>
+    </div>
+    <div class="faq">
+      <q>Q: 多久跑一次？</q>
+      <a>A: 建议<strong>每周一次</strong>。每天跑也行，但7天以内的数据量CI会很宽，判定不够精确。14天以上的数据效果最好。</a>
+    </div>
+    <div class="faq">
+      <q>Q: 30款全站推广也可以用吗？</q>
+      <a>A: 可以。全站推广的"烧不动"问题更严重——差的款平台根本不推，MAB能帮你第3天就识别出哪些款烧不动并淘汰，省下的预算给能烧得动的好款。</a>
+    </div>
+  </div>
+
+  <!-- ========== Section 7: Papers ========== -->
+  <h2><span class="ico" style="background:rgba(34,211,238,.15)">📄</span> 参考论文 · 小白解读</h2>
+
+  <div class="card">
+    <h3>1. Thompson Sampling — "抛硬币做决策"</h3>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <span class="chip cyan">NeurIPS 2011</span>
+      <a href="https://proceedings.neurips.cc/paper/2011/hash/e53a0a2978c28872a4505bdb51dbb1b0-Abstract.html" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
+    </div>
+    <p><strong>论文</strong>：Chapelle & Li, "An Empirical Evaluation of Thompson Sampling", NeurIPS 2011</p>
+    <p><strong>小白解读</strong>：</p>
+    <div class="note">
+      想象你有3台老虎机，不知道哪台中奖率高。你每台都试几次，然后"按概率"选下一台——<br>
+      A机中奖率可能是70%（也可能是50%），你就70%的概率选A。<br><br>
+      这就是Thompson Sampling：用<strong>概率</strong>代替<strong>赌注</strong>。不确定的时候多探索，确定的时候就集中。比"贪心"（永远选当前最好的）更聪明，比"均匀试"（每台花一样多）更高效。
+    </div>
+    <p><strong>在本项目中</strong>：每个商品ID的后验分布给出"P(ROI达标)"，我们用它来决定预算分配——达标概率高的多分钱，概率低的少分钱。</p>
+  </div>
+
+  <div class="card">
+    <h3>2. CR 连续淘汰 — "比不过就走人"</h3>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <span class="chip cyan">NeurIPS 2024</span>
+      <a href="https://proceedings.neurips.cc/paper/2024/hash/cr-continuous-rejects" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
+    </div>
+    <p><strong>论文</strong>：Wang et al., "Continuous Rejects for Multi-Armed Bandits", NeurIPS 2024</p>
+    <p><strong>小白解读</strong>：</p>
+    <div class="note">
+      10个人赛跑，你不需要等所有人跑完才知道谁不行。<br>
+      如果跑了一半，某人的速度"就算后面冲刺也不可能追上前3名"——那他就可以提前出局了。<br><br>
+      CR淘汰就是做这件事：看每个款的<strong>置信区间</strong>（可能最好的成绩 vs 可能最差的成绩），如果某款"可能最好的成绩"都比不上别人"可能最差的成绩"，那它就没必要再测了。<br><br>
+      关键优势：不是"一刀切"，而是<strong>连续地</strong>判断——每来一天新数据就重新评估，够判就判，不够就等。
+    </div>
+    <p><strong>在本项目中</strong>：当多个款都有足够样本时，比较置信区间。如果款B的CI下界远低于款A的CI上界 → 款B被CR淘汰。</p>
+  </div>
+
+  <div class="card">
+    <h3>3. 方差自适应预算 — "越不确定越要探"</h3>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <span class="chip cyan">UAI 2023</span>
+      <a href="https://auai.org/uai2023/proceedings" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
+    </div>
+    <p><strong>论文</strong>：Lalitha et al., "Scalable Thompson Sampling with Variance Adaptation", UAI 2023</p>
+    <p><strong>小白解读</strong>：</p>
+    <div class="note">
+      你有两个款：<br>
+      - 款A：测了7天，ROI稳定在1.8-2.0之间（很确定）<br>
+      - 款B：测了3天，ROI一天0.5一天3.5（完全不确定）<br><br>
+      纯Thompson Sampling会基于P(达标)分配预算，款A概率高→多分钱。但款B才是<strong>最需要数据</strong>的——它的真实ROI可能很好也可能很差，不给它预算就永远不知道。<br><br>
+      方差自适应就是：给"不确定"的款额外加点预算，让它赶紧积累数据。不确定度 = p×(1-p)，刚好50%概率时最需要探索。
+    </div>
+    <p><strong>在本项目中</strong>：预算分配公式 budget_i ∝ p_i × (1-p_i)，不确定的款自动拿到更多预算。</p>
+  </div>
+
+  <div class="card">
+    <h3>4. 非平稳环境处理 — "游戏规则在变"</h3>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <span class="chip cyan">NeurIPS 2025</span>
+      <a href="https://neurips.cc/virtual/2025/poster/confee-nsmab" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
+    </div>
+    <p><strong>论文</strong>：CONFEE-NSMAB, "Non-Stationary Multi-Armed Bandits with Feedback Constraints", NeurIPS 2025</p>
+    <p><strong>小白解读</strong>：</p>
+    <div class="note">
+      传统老虎机假设中奖率不变，但电商不是——<br>
+      - 大促期间ROI暴涨<br>
+      - 竞品降价后你的ROI暴跌<br>
+      - 换了主图/标题后整个商品的表现变了<br><br>
+      如果算法不知道环境变了，就会用旧数据做错误判断。<br><br>
+      两个对策：<br>
+      <strong>时间衰减</strong>：7天前的数据权重是今天的一半，自然"忘掉"旧环境<br>
+      <strong>漂移检测</strong>：如果最近3天的ROI突然和之前差异很大（>0.5），标记"检测到漂移"，提醒你环境变了
+    </div>
+    <p><strong>在本项目中</strong>：λ=0.15的时间衰减 + 漂移检测。页面会显示"环境漂移: 已检测/未检测"。</p>
+  </div>
+
+  <div class="card">
+    <h3>5. 方差膨胀 — "极端值别慌"</h3>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <span class="chip cyan">NeurIPS 2025</span>
+      <a href="https://neurips.cc/virtual/2025/poster/ts-vi" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
+    </div>
+    <p><strong>论文</strong>：TS-VI, "Adaptive Variance Inflation in Thompson Sampling", NeurIPS 2025</p>
+    <p><strong>小白解读</strong>：</p>
+    <div class="note">
+      电商的ROI数据有个大问题：<strong>极端值特别多</strong>。<br>
+      一天ROI=0（没出单），下一天ROI=5（出了一个利润高的单），这种"重尾分布"会让标准Thompson Sampling过度自信——以为自己很确定，其实只是运气好/差。<br><br>
+      方差膨胀就是：遇到数据波动大的时候，主动<strong>放大不确定性</strong>，让自己更谨慎。不确定→多探索→少犯错。
+    </div>
+    <p><strong>在本项目中</strong>：NIG后验自然处理了重尾——当S（样本方差）大时，后验的σ²也会大，CI变宽，判定更保守。</p>
+  </div>
+
+  <div class="card">
+    <h3>6. 聚类老虎机 — "同类商品共享经验"</h3>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <span class="chip cyan">ICML 2025</span>
+      <a href="https://icml.cc/virtual/2025/poster/clustered-bandits" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
+    </div>
+    <p><strong>论文</strong>：Cl-BAI, "Clustered Bandits for Best Arm Identification", ICML 2025</p>
+    <p><strong>小白解读</strong>：</p>
+    <div class="note">
+      30个款要测，但如果其中5个是同类目（比如都是纸杯），它们的表现可能很相似。<br><br>
+      普通MAB把它们当完全独立的30个臂来测——每个都要从零开始学。<br>
+      聚类MAB先发现"这5个纸杯是一类的"，然后<strong>共享数据</strong>——测了1个纸杯的表现，其他4个也获得了先验知识。<br><br>
+      好处：新上架的款不用从零开始测，同类目兄弟款的数据就是它的"起跑线"。
+    </div>
+    <p><strong>在本项目中</strong>：当前未实现聚类（需要类目信息）。这是未来的优化方向——当你有多个同类目商品时，冷启动速度可以提升3-5倍。</p>
+  </div>
+
+  <div class="warn" style="margin-top:8px">
+    <strong>💡 论文阅读建议</strong>：如果你不是算法研究人员，不需要读懂论文原文。上面的"小白解读"已经把每篇论文的核心思想翻译成了测款场景。关键是理解：<strong>为什么要这样做</strong>，而不是<strong>数学公式怎么推导</strong>。
+  </div>
+
+  <!-- Back -->
+  <div style="margin-top:32px;text-align:center">
+    <a href="index.html" style="display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:10px;background:linear-gradient(135deg,var(--cyan),#0E7490);color:#06121A;font-family:var(--disp);font-weight:700;font-size:14px;text-decoration:none;box-shadow:0 0 20px rgba(34,211,238,.3)">← 返回测款工作台</a>
+  </div>
+
+</div>
+</body>
+</html>
