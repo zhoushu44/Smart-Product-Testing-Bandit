@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
-<title>测款工作台 · 多臂老虎机 v4</title>
+<title>测款工作台 · CTR 多臂淘汰</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -67,11 +67,13 @@
   .todo-item.stop{border-left-color:var(--red)}
   .todo-item.keep{border-left-color:var(--cyan)}
   .todo-item.try{border-left-color:var(--amber)}
+  .todo-item.stuck{border-left-color:#8b5cf6}
   .todo-item .act{font-family:var(--disp);font-weight:700;font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:6px}
   .todo-item.add .act{color:var(--green)}
   .todo-item.stop .act{color:var(--red)}
   .todo-item.keep .act{color:var(--cyan)}
   .todo-item.try .act{color:var(--amber)}
+  .todo-item.stuck .act{color:#8b5cf6}
   .todo-item .desc{font-size:12px;color:var(--muted);line-height:1.6}
   .todo-item .desc b{color:var(--text);font-family:var(--mono)}
   .todo-item .ids{font-family:var(--mono);font-size:11px;margin-top:6px;color:var(--text);word-break:break-all}
@@ -162,12 +164,12 @@
       <div class="logo">MAB</div>
       <div>
         <h1>测款工作台</h1>
-        <div class="sub">多臂老虎机 v4 · 高斯后验 + 时间衰减 + CR淘汰</div>
+        <div class="sub">CTR 多臂淘汰 · 点击率 Beta 后验相对比较</div>
       </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <a href="guide.html" style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;background:var(--panel);border:1px solid var(--border);color:var(--muted);text-decoration:none;font-family:var(--disp);font-weight:600;font-size:12px;transition:.15s" onmouseover="this.style.borderColor='var(--cyan)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">📖 原理与教程</a>
-      <span style="font-family:var(--mono);font-size:11px;padding:5px 9px;border-radius:7px;background:var(--panel);border:1px solid var(--border);color:var(--muted)">NIG后验 + CR'24</span>
+      <span style="font-family:var(--mono);font-size:11px;padding:5px 9px;border-radius:7px;background:var(--panel);border:1px solid var(--border);color:var(--muted)">CTR Beta 后验</span>
     </div>
   </header>
 
@@ -186,7 +188,7 @@
 
   <!-- 控制 -->
   <div class="card" style="margin-bottom:14px">
-    <h4><span class="dot"></span>设置 · 选分组 + 淘汰门槛 + 单款预算</h4>
+    <h4><span class="dot"></span>测款设置 · 点击率多臂淘汰</h4>
     <div class="controls">
       <div class="fld">
         <label>分组</label>
@@ -194,81 +196,27 @@
         <div class="hint" id="groupHint">上传后自动列出</div>
       </div>
       <div class="fld">
-        <label>目标投产比 ROI</label>
-        <input id="targetRoi" type="number" step="0.01" value="2.19" disabled />
-        <div class="hint">留空自动从出价方式提取</div>
+        <label>测款周期(天)</label>
+        <input id="testDays" type="number" step="1" value="7" />
+        <div class="hint">用于判断本轮测款观察周期</div>
       </div>
       <div class="fld">
-        <label>淘汰门槛花费(元) ★</label>
-        <input id="minSpend" type="number" step="1" value="15" />
-        <div class="hint">花到此值才参与淘汰(推荐15-30)</div>
+        <label>单款总预算(元)</label>
+        <input id="perArmBudget" type="number" step="10" value="300" />
+        <div class="hint">每个商品ID本轮最多可消耗</div>
       </div>
       <div class="fld">
-        <label>单款预算上限(元) ★</label>
-        <input id="perArmBudget" type="number" step="5" value="100" />
-        <div class="hint">每个商品ID最多分多少预算</div>
+        <label>淘汰把握度(%)</label>
+        <input id="elimConfidence" type="number" step="1" value="95" />
+        <div class="hint">有多少把握比当前好款差才淘汰</div>
+      </div>
+      <div class="fld">
+        <label>最小曝光量</label>
+        <input id="minImpr" type="number" step="50" value="100" />
+        <div class="hint">低于此值只观察，不强淘汰</div>
       </div>
     </div>
-    <details style="margin-top:10px">
-      <summary style="cursor:pointer;color:var(--muted);font-family:var(--mono);font-size:12px;padding:6px 0">▸ 高级参数(一般不用改)</summary>
-      <div class="controls" style="margin-top:8px">
-        <div class="fld">
-          <label>总预算(元)</label>
-          <input id="totalBudget" type="number" step="50" value="1000" />
-          <div class="hint">按胜率自动分到各商品ID</div>
-        </div>
-        <div class="fld">
-          <label>最小成交笔数</label>
-          <input id="minDeals" type="number" step="1" value="3" />
-          <div class="hint">低于此值算样本不足</div>
-        </div>
-        <div class="fld">
-          <label>时间衰减率 (λ)</label>
-          <input id="decayRate" type="number" step="0.05" value="0.15" />
-          <div class="hint">0=不衰减, 0.15≈7天半衰期</div>
-        </div>
-        <div class="fld">
-          <label>淘汰显著性 (δ)</label>
-          <input id="elimDelta" type="number" step="0.01" value="0.05" />
-          <div class="hint">CR淘汰显著性, 越小越保守</div>
-        </div>
-        <div class="fld">
-          <label>后验模型</label>
-          <select id="posteriorType">
-            <option value="gaussian" selected>高斯NIG (推荐)</option>
-            <option value="beta">Beta (兼容v3)</option>
-          </select>
-          <div class="hint">高斯保留ROI幅度信息</div>
-        </div>
-        <div class="fld">
-          <label>点击率 CTR 标准 (%)</label>
-          <input id="ctrThr" type="number" step="0.1" value="1.0" />
-        </div>
-        <div class="fld">
-          <label>转化率 CVR 标准 (%)</label>
-          <input id="cvrThr" type="number" step="0.1" value="3.0" />
-        </div>
-        <div class="fld">
-          <label>展现量门槛/天</label>
-          <input id="impThr" type="number" step="10" value="100" />
-        </div>
-        <div class="fld">
-          <label>烧不动日均花费(元)</label>
-          <input id="burnMinDaily" type="number" step="1" value="3" />
-          <div class="hint">低于此值判定平台不给流量</div>
-        </div>
-        <div class="fld">
-          <label>可靠曝光门槛</label>
-          <input id="reliableImpr" type="number" step="50" value="300" />
-          <div class="hint">低于此值趋势/相关性谨慎看</div>
-        </div>
-        <div class="fld">
-          <label>可靠点击门槛</label>
-          <input id="reliableClicks" type="number" step="1" value="10" />
-          <div class="hint">低于此值CVR不可靠</div>
-        </div>
-      </div>
-    </details>
+    <div class="hint" style="margin-top:10px">全站推广版：先识别跑不动，再对曝光足够的款做CTR后验分轮淘汰；预算优先给当前好款和最强挑战者。</div>
     <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
       <button class="run" id="runBtn" disabled>开始测款</button>
       <span id="runStatus" class="muted" style="font-family:var(--mono);font-size:12px"></span>
@@ -300,7 +248,7 @@
               <th>状态</th>
               <th>建议动作</th>
               <th>后台调整</th>
-              <th class="r">分配预算</th>
+              <th class="r">剩余预算</th>
               <th>详情</th>
             </tr>
           </thead>
@@ -350,12 +298,10 @@
 
 <script>
 /* ============================================================
-   多臂老虎机测款 v4 - 纯前端
+   CTR 多臂淘汰 - 纯前端
    臂 = 商品ID
-   算法: Normal-Inverse-Gamma 高斯后验 + CR连续淘汰(NeurIPS'24)
-   可降级: Beta-Bernoulli 后验(兼容v3)
-   论文: Chapelle&Li(2011), Wang et al.(2024 NeurIPS CR),
-         Lalitha et al.(2023 UAI SHAdaVar)
+   算法: Beta-Bernoulli 点击率后验 + 相对置信淘汰
+   规则: 有足够把握认为某臂点击率低于当前好款时淘汰
    ============================================================ */
 const $ = id => document.getElementById(id);
 let RAW=null, COLS=null, GROUPS={}, RESULT=null, RESULT_ARMS=null, CURRENT_PARAMS=null;
@@ -404,9 +350,6 @@ function handleFile(file){
       sel.value = GROUPS['测试']!=null?'测试':sel.options[0].value;
       sel.disabled=false;
       $('groupHint').textContent = `共 ${rows.length} 行 · ${Object.keys(GROUPS).length} 分组`;
-      const sample = rows.find(r=>parseRoi(r[COLS.bid])>0);
-      if(sample){ const t=parseRoi(sample[COLS.bid]); if(!isNaN(t)&&t>0&&t<20) $('targetRoi').value=t; }
-      $('targetRoi').disabled=false;
       $('runBtn').disabled=false;
       const gidCount = new Set(rows.map(r=>String(r[COLS.id]||'').trim()).filter(Boolean)).size;
       $('fileInfo').innerHTML = `<span class="ok">✓ 已解析</span> · ${file.name} · <b>${rows.length}</b> 行 · <b>${gidCount}</b> 个商品ID(臂) · ${Object.keys(GROUPS).length} 分组`;
@@ -522,6 +465,7 @@ function aggregate(rows, group, params){
       ctr:impr>0?clicks/impr:NaN,
       cvr:clicks>0?deals/clicks:NaN,
       daily:p.daily,
+      totalDays: dates.length,
       dailyRois, trendSlope, trendLabel, dailyVar,
     };
   });
@@ -698,252 +642,196 @@ function detectGlobalShift(allDailyRois){
   };
 }
 
-/* ---------- 评估 (v4: NIG后验 + CR淘汰 + 方差自适应预算) ---------- */
-function evaluate(arms, params){
-  const useGaussian = params.useGaussian !== false;
-  const delta = params.elimDelta || 0.05;
+function seededRng(seed){
+  let s = seed | 0;
+  return function(){
+    s = s + 0x6D2B79F5 | 0;
+    let t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
 
-  // 全局漂移检测
-  const allDailyRois = [];
-  arms.forEach(a => a.dailyRois.forEach(dr => allDailyRois.push(dr)));
-  const shiftInfo = detectGlobalShift(allDailyRois);
-
-  // Step 1: 后验计算
-  const ev = arms.map(a => {
-    let postResult;
-    if(useGaussian && a.dailyRois.length > 0){
-      const observations = a.dailyRois.map(dr => ({
-        roi: shiftInfo.detected ? (dr.roi - shiftInfo.recentGroupAvg + a.targetRoi) : dr.roi,
-        weight: dr.weight,
-      }));
-      const armSeed = 42 + a.id.split('').reduce((s,c)=>s+c.charCodeAt(0),0);
-      postResult = nigPosterior(observations, a.targetRoi, armSeed);
-    } else {
-      // Beta 降级模式
-      const hit = a.hitDays, miss = Math.max(0, a.paidDays - hit);
-      const ci = betaCI(hit + 1, miss + 1, 20000, 42);
-      postResult = {
-        mu: a.targetRoi * ci.mean,
-        sigma2: NaN,
-        pTarget: ci.mean,
-        ciLo: ci.lo,
-        ciHi: ci.hi,
-        nEff: a.paidDays,
-        ts: ci.sample,
-      };
+function betaSamples(alpha, beta, n=8000, seed=42){
+  const rnd = seededRng(seed + Math.floor(alpha * 1000) + Math.floor(beta * 7));
+  function normal(){ let u=0,v=0; while(u===0)u=rnd(); while(v===0)v=rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+  function gammaSample(shape){
+    if(shape < 1){ const u = rnd(); return gammaSample(shape + 1) * Math.pow(u, 1 / shape); }
+    const d = shape - 1 / 3, c = 1 / Math.sqrt(9 * d);
+    while(true){
+      let x; do{x = normal();}while(1 + c * x <= 0);
+      const v = (1 + c * x) ** 3;
+      if(rnd() < 1 - 0.0331 * x ** 4) return d * v;
+      if(Math.log(rnd()) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
     }
+  }
+  const a = Math.max(alpha, 1e-6), b = Math.max(beta, 1e-6);
+  const arr = [];
+  for(let i=0;i<n;i++){
+    const g1 = gammaSample(a), g2 = gammaSample(b);
+    arr.push(g1 / (g1 + g2));
+  }
+  return arr;
+}
 
+/* ---------- 评估：点击率 Beta 后验 + 相对置信淘汰 ---------- */
+function evaluate(arms, params){
+  const sampleN = 8000;
+  const minImpr = params.minImpr || 100;
+  const elimConfidence = params.elimConfidence || 0.95;
+  const budget = params.perArmBudget || 0;
+
+  const ev = arms.map(a => {
+    const alpha = a.clicks + 1;
+    const beta = Math.max(a.impr - a.clicks, 0) + 1;
+    const armSeed = 42 + a.id.split('').reduce((s,c)=>s+c.charCodeAt(0),0);
+    const samples = betaSamples(alpha, beta, sampleN, armSeed);
+    const sorted = [...samples].sort((x,y)=>x-y);
+    const mean = samples.reduce((s,v)=>s+v,0) / sampleN;
+    const q = p => sorted[Math.min(sampleN - 1, Math.max(0, Math.floor(p * sampleN)))];
     return {
       ...a,
-      postMean: postResult.mu,
-      postLo: postResult.ciLo,
-      postHi: postResult.ciHi,
-      pTarget: postResult.pTarget,
-      nEff: postResult.nEff,
-      ts: postResult.ts,
-      postVar: postResult.sigma2,
-      shiftDetected: shiftInfo.detected,
+      ctrAlpha: alpha,
+      ctrBeta: beta,
+      ctrSamples: samples,
+      ctrMean: mean,
+      ctrLo: q(0.025),
+      ctrHi: q(0.975),
+      ts: samples[Math.floor(seededRng(armSeed + 99)() * sampleN)],
+      nEff: a.impr,
+      postMean: mean,
+      postLo: q(0.025),
+      postHi: q(0.975),
+      pTarget: mean,
+      postVar: mean * (1 - mean),
     };
   });
 
-  // Step 2: 漏斗分层判定 + CR 淘汰
-  const suff = ev.filter(a => a.deals >= params.minDeals && a.spend >= params.minSpend && a.paidDays >= params.minDays);
-  const maxWaitDays = 5; // 降投产最多等5天
-  const burnMinDaily = params.burnMinDaily || 3; // 日均花费低于此值=烧不动(元)
+  ev.forEach(a=>{
+    const lowSpend = budget > 0 ? a.spend <= budget * 0.10 : true;
+    a.isStuck = ((a.paidDays >= 2 && a.impr < 50 && lowSpend) || (a.paidDays >= 3 && a.impr < minImpr && lowSpend));
+  });
+  const runnable = ev.filter(a => !a.isStuck);
+  const candidates = runnable.filter(a => a.impr >= minImpr);
+  const best = (candidates.length ? candidates : (runnable.length ? runnable : ev)).slice().sort((a,b)=>b.ctrMean-a.ctrMean)[0];
+  const observedDays = Math.max(...ev.map(a => a.totalDays || 0), 0);
+  const finalMode = observedDays >= (params.testDays || 7);
+  ev.forEach(a => {
+    let loseProb = 0;
+    if(best && a !== best){
+      for(let i=0;i<sampleN;i++) if(a.ctrSamples[i] < best.ctrSamples[i]) loseProb++;
+      loseProb /= sampleN;
+    }
+    a.loseProb = loseProb;
+    a.winProb = best && a === best ? 1 : 1 - loseProb;
+  });
+  const sortedByCtr = [...runnable].sort((a,b)=>b.ctrMean-a.ctrMean);
+  const challengerIds = new Set(sortedByCtr.filter(a=>a !== best).slice(0,2).map(a=>a.id));
+  const elimByRound = {};
+  let activeIds = new Set(runnable.map(a=>a.id));
+  const markElim = (arm, rule, detail) => {
+    if(!activeIds.has(arm.id) || arm === best) return;
+    activeIds.delete(arm.id);
+    elimByRound[arm.id] = {rule, detail};
+  };
+  ev.forEach(a=>{ if(a !== best && a.impr >= 50 && a.loseProb >= 0.95) markElim(a, '第1轮·95%把握落后', '第1轮：已有95%把握点击率低于当前好款'); });
+  ev.forEach(a=>{ if(a !== best && activeIds.has(a.id) && a.impr >= 50 && a.loseProb >= 0.90) markElim(a, '第2轮·90%把握落后', '第2轮：已有90%把握点击率低于当前好款'); });
+  if(observedDays >= 4){
+    const top5 = new Set(sortedByCtr.slice(0,5).map(a=>a.id));
+    ev.forEach(a=>{ if(activeIds.has(a.id) && !top5.has(a.id)) markElim(a, '第3轮·保留前5', '第3轮：预算集中到后验CTR前5个候选'); });
+  }
+  if(observedDays >= 6){
+    const top3 = new Set(sortedByCtr.slice(0,3).map(a=>a.id));
+    ev.forEach(a=>{ if(activeIds.has(a.id) && !top3.has(a.id)) markElim(a, '第4轮·保留前3', '第4轮：预算集中到后验CTR前3个候选'); });
+  }
+  if(finalMode){
+    ev.forEach(a=>{ if(a !== best && activeIds.has(a.id)) markElim(a, '第5轮·7天终局', `第5轮：测款周期已满${params.testDays || 7}天，只保留后验CTR最高款`); });
+  }
 
   ev.forEach(a => {
-    const reachElim = a.spend >= params.minSpend;
-    const enough = a.deals >= params.minDeals && a.spend >= params.minSpend && a.paidDays >= params.minDays;
-    const ctr = a.impr > 0 ? a.clicks / a.impr : 0;
-    const cvr = a.clicks > 0 ? a.deals / a.clicks : 0;
-    const dailySpend = a.spend / Math.max(a.paidDays, 1);
-    const suggestedRoi = (a.targetRoi * 0.7).toFixed(2); // 降投产建议: 目标的70%
+    const winProb = a.winProb;
+    const remainBudget = Math.max(0, budget - a.spend);
+    a.bestId = best ? best.id : '';
+    a.bestCtr = best ? best.ctrMean : NaN;
+    a.confidence = a === best ? winProb : a.loseProb;
+    a.share = winProb;
+    a.sharePct = budget > 0 ? Math.min(1, a.spend / budget) : 0;
+    a.budget = a.status === 'stop' ? 0 : remainBudget;
+    a.capped = remainBudget === 0;
 
-    // ---- 漏斗第1层: 0展现 → 直接关停 ----
-    if(a.paidDays >= params.minDays && a.impr <= 0){
-      a.status='stop'; a.statusText='淘汰'; a.confidence=0.99;
-      a.action='关停'; a.actionDetail=`平台不给展现，直接关停`;
-      a.elimRule='0展现·关停';
-      a.suggestion='后台暂停该计划';
-    }
-    // ---- 漏斗第2层: 烧不动(日均<3元) → 直接淘汰 ----
-    //    烧不动=平台不给流量, 有1-2笔成交也没用, 永远放量不了
-    else if(a.paidDays >= params.minDays && dailySpend < burnMinDaily){
-      a.status='stop'; a.statusText='淘汰'; a.confidence=0.95;
-      a.action='关停'; a.actionDetail=`日均仅${dailySpend.toFixed(1)}元烧不动，平台不给流量${a.deals>0?`，${a.deals}笔成交也放量不了`:''}`;
-      a.elimRule=`烧不动·日均<${burnMinDaily}元`;
-      a.suggestion='后台暂停该计划';
-    }
-    // ---- 漏斗第3层: 有展现0点击 → 关停 ----
-    else if(a.paidDays >= params.minDays && a.impr > 0 && a.clicks === 0){
-      a.status='stop'; a.statusText='淘汰'; a.confidence=0.95;
-      a.action='关停'; a.actionDetail=`展现${a.impr}次0点击，主图/标题无吸引力`;
-      a.elimRule='0点击·CTR=0关停';
-      a.suggestion='换主图重测或关停';
-    }
-    else if(a.paidDays >= params.minDays && ctr > 0 && ctr < 0.02 && a.clicks < 3){
-      a.status='stop'; a.statusText='淘汰'; a.confidence=0.90;
-      a.action='关停'; a.actionDetail=`CTR仅${(ctr*100).toFixed(1)}%，点击成本太高`;
-      a.elimRule='低CTR·关停';
-      a.suggestion='换主图重测或关停';
-    }
-    // ---- 漏斗第4层: 有点击0成交 + 观察期内 → 降投产试探 ----
-    else if(a.clicks > 0 && a.deals === 0 && a.paidDays < maxWaitDays){
-      a.status='try'; a.statusText='降投产试'; a.confidence=0.5;
-      a.action='降投产'; a.actionDetail=`CTR=${(ctr*100).toFixed(1)}%有点击但0成交，降投产扩人群试探`;
+    if(a === best){
+      a.status='go'; a.statusText='当前好款';
+      a.action='保留'; a.actionDetail=`当前点击率后验最高，作为对比好款`;
       a.elimRule='—';
-      a.suggestion=`投产比 ${a.targetRoi} → ${suggestedRoi}，扩人群看能否出单`;
-    }
-    // ---- 漏斗第4层: 有点击0成交 + 已超过等待期 → 淘汰 ----
-    else if(a.clicks > 0 && a.deals === 0 && a.paidDays >= maxWaitDays){
-      a.status='stop'; a.statusText='淘汰'; a.confidence=0.90;
-      a.action='关停'; a.actionDetail=`测${a.paidDays}天${a.clicks}点击0成交`;
-      a.elimRule='0成交超时·淘汰';
-      a.suggestion='后台暂停该计划';
-    }
-    // ---- 主推判定: 毛ROI和净ROI都需达标(防止高退款款被误推) ----
-    //   毛ROI门槛 = 目标×0.6 (测款阶段放宽)
-    //   净ROI门槛 = 目标×0.5 (扣除退款后仍要有利润)
-    else if(enough && a.pTarget >= 0.5 && a.postMean >= a.targetRoi * 0.6){
-      if(isNaN(a.netRoi) || a.netRoi >= a.targetRoi * 0.5){
-        a.status='go'; a.statusText='主推'; a.confidence=a.pTarget;
-        a.action='加预算'; a.actionDetail='把握度高，放量主推';
-        a.elimRule='—';
-        a.suggestion=`预算加到 ${Math.min(Math.round(a.budget * 1.5), params.perArmBudget)}元/天`;
-      } else {
-        // 毛ROI达标但净ROI不达标 → 退款率高, 降级为继续测
-        a.status='wait'; a.statusText='继续测'; a.confidence=a.pTarget;
-        a.action='维持'; a.actionDetail=`毛ROI=${a.postMean.toFixed(2)}达标但净ROI=${a.netRoi.toFixed(2)}偏低，退款率高，暂不主推`;
-        a.elimRule='—';
-        a.suggestion='维持当前设置, 优化退款率后再主推';
-      }
-    }
-    // ---- CR 淘汰判定 (样本充足的臂) ----
-    else if(reachElim && enough && suff.length > 1){
-      const bestHi = Math.max(...suff.filter(s=>s!==a).map(s=>s.postHi));
-      const gap = bestHi - a.postLo;
-      const threshold = Math.sqrt(2 * Math.log(4 * Math.max(a.nEff,1)**2 / delta) / Math.max(a.nEff,1));
-      if(gap > threshold){
-        a.status='stop'; a.statusText='淘汰'; a.confidence=1 - delta / ev.length;
-        a.action='关停'; a.actionDetail='与最优臂差距显著，关停释放预算';
-        a.elimRule='CR·NeurIPS2024';
-        a.suggestion='后台暂停，预算给主推款';
-      } else {
-        a.status='wait'; a.statusText='继续测'; a.confidence=Math.max(a.pTarget, 1 - a.pTarget);
-        a.action='维持'; a.actionDetail='把握度不足，维持预算继续观察1-2天';
-        a.elimRule='—';
-        a.suggestion='维持当前设置不变';
-      }
-    }
-    // ---- 花费未达门槛 / 样本不足 ----
-    else if(!enough){
-      if(a.paidDays >= params.minDays && a.impr <= 0){
-        a.status='stop'; a.statusText='淘汰'; a.confidence=0.99;
-        a.action='关停'; a.actionDetail=`测${a.paidDays}天0展现，平台不给流量`;
-        a.elimRule='0展现·关停';
-        a.suggestion='后台暂停该计划';
-      } else if(dailySpend < burnMinDaily){
-        a.status='stop'; a.statusText='淘汰'; a.confidence=0.95;
-        a.action='关停'; a.actionDetail=`日均${dailySpend.toFixed(1)}元烧不动，平台不给流量`;
-        a.elimRule=`烧不动·日均<${burnMinDaily}元`;
-        a.suggestion='后台暂停该计划';
-      } else if(a.clicks > 0 && a.deals === 0){
-        a.status='try'; a.statusText='降投产试'; a.confidence=0.5;
-        a.action='降投产'; a.actionDetail=`有点击${a.clicks}次但0成交，降投产试探`;
-        a.elimRule='—';
-        a.suggestion=`投产比 ${a.targetRoi} → ${suggestedRoi}`;
-      } else {
-        a.status='try'; a.statusText='观察期'; a.confidence = 1 - Math.min(1, Math.abs(a.postHi - a.postLo));
-        a.action='给量探索'; a.actionDetail=`花费${a.spend.toFixed(0)}元未达门槛，继续给量`;
-        a.elimRule='—';
-        a.suggestion='维持当前设置，等待更多数据';
-      }
-    }
-    // ---- 其他: 继续测 ----
-    else {
-      a.status='wait'; a.statusText='继续测'; a.confidence=Math.max(a.pTarget, 1 - a.pTarget);
-      a.action='维持'; a.actionDetail='把握度不足，维持预算继续观察';
+      a.suggestion='继续给量验证';
+    } else if(a.isStuck){
+      a.status='stuck'; a.statusText='跑不动';
+      a.action='单独重测'; a.actionDetail='全站推广给量不足，暂不参与CTR淘汰';
+      a.elimRule='平台给量不足';
+      a.suggestion='提高出价、换计划或单独拉出测试';
+    } else if(elimByRound[a.id]){
+      a.status='stop'; a.statusText='淘汰';
+      a.action='关停'; a.actionDetail=elimByRound[a.id].detail;
+      a.elimRule=elimByRound[a.id].rule;
+      a.suggestion='停止投放或换图重测';
+      a.budget = 0;
+    } else if(challengerIds.has(a.id)){
+      a.status='challenge'; a.statusText='挑战者';
+      a.action='重点给量'; a.actionDetail='最可能超过当前好款，建议保留预算继续验证';
+      a.elimRule='当前挑战者';
+      a.suggestion='继续给量，与当前好款对比';
+    } else if(a.impr <= 0 && a.paidDays >= Math.min(params.testDays || 7, 2)){
+      a.status='try'; a.statusText='观察期';
+      a.action='继续给量'; a.actionDetail='暂时没有曝光，先获取曝光再判断';
+      a.elimRule='样本不足';
+      a.suggestion='提高出价或预算获取曝光';
+    } else if(a.impr < minImpr){
+      a.status='try'; a.statusText='观察期';
+      a.action='继续给量'; a.actionDetail=`曝光${a.impr}次，低于最小曝光${minImpr}，不强淘汰`;
+      a.elimRule='样本不足';
+      a.suggestion='继续测到最小曝光后再比较';
+    } else if(a.loseProb >= elimConfidence){
+      a.status='stop'; a.statusText='淘汰';
+      a.action='关停'; a.actionDetail=`${(a.loseProb*100).toFixed(1)}%把握认为点击率低于当前好款`;
+      a.elimRule='CTR后验相对淘汰';
+      a.suggestion='停止投放或换图重测';
+      a.budget = 0;
+    } else {
+      a.status='wait'; a.statusText='继续测';
+      a.action='维持'; a.actionDetail=`低于好款的把握为${(a.loseProb*100).toFixed(1)}%，未达到淘汰线${(elimConfidence*100).toFixed(0)}%`;
       a.elimRule='—';
-      a.suggestion='维持当前设置不变';
+      a.suggestion='继续观察';
     }
 
     a.reason = buildReason(a, params);
   });
+  ev.forEach(a=>delete a.ctrSamples);
 
-  // Step 3: 方差自适应预算分配
-  const active = ev.filter(a=>a.status!=='stop');
-  const cap = params.perArmBudget>0 ? params.perArmBudget : Infinity;
-  ev.filter(a=>a.status==='stop').forEach(a=>{a.share=0;a.budget=0;a.capped=false;});
-
-  if(active.length){
-    const temp = 6;
-    const eps = 0.01;
-    // 方差自适应: budget_weight = exp(temp * ts) * sqrt(var)
-    const weights = active.map(a => {
-      const v = isNaN(a.postVar) ? eps : Math.max(a.postVar, eps);
-      return Math.exp(temp * a.ts) * Math.sqrt(v);
-    });
-    const sumW = weights.reduce((s,w)=>s+w, 0);
-    active.forEach((a,i) => a.share = weights[i] / sumW);
-
-    // cap-and-redistribute (迭代5次)
-    let remaining = params.totalBudget;
-    const cappedSet = new Set();
-    for(let iter=0; iter<5; iter++){
-      let cappedThisRound = false;
-      active.forEach(a=>{
-        if(cappedSet.has(a)) return;
-        const raw = a.share * remaining;
-        if(raw >= cap){
-          a.budget = cap; a.capped = true;
-          cappedSet.add(a); cappedThisRound = true;
-        } else {
-          a.budget = raw; a.capped = false;
-        }
-      });
-      if(!cappedThisRound) break;
-      remaining = params.totalBudget - [...cappedSet].reduce((s,a)=>s+a.budget,0);
-      const rest = active.filter(a=>!cappedSet.has(a));
-      if(rest.length){
-        const w2 = rest.map(a => {
-          const v = isNaN(a.postVar) ? eps : Math.max(a.postVar, eps);
-          return Math.exp(temp * a.ts) * Math.sqrt(v);
-        });
-        const sw2 = w2.reduce((s,w)=>s+w,0);
-        rest.forEach((a,i) => a.share = w2[i] / sw2);
-      }
-    }
-  }
-  ev.forEach(a=>{ if(params.totalBudget>0) a.sharePct = a.budget/params.totalBudget; else a.sharePct=0; });
-
-  const order={go:0,wait:1,try:2,stop:3};
-  ev.sort((a,b)=>(order[a.status]-order[b.status])||(b.ts-a.ts));
+  const order={go:0,challenge:1,wait:2,try:3,stuck:4,stop:5};
+  ev.sort((a,b)=>(order[a.status]-order[b.status])||(b.ctrMean-a.ctrMean));
   return ev;
 }
 
 function buildReason(a, params){
+  const ctr = isNaN(a.ctr) ? '-' : (a.ctr * 100).toFixed(2) + '%';
+  const ctrMean = (a.ctrMean * 100).toFixed(2) + '%';
+  const ci = `[${(a.ctrLo * 100).toFixed(2)}%, ${(a.ctrHi * 100).toFixed(2)}%]`;
   const parts=[];
-  const roiStr = isNaN(a.roi)?'-':a.roi.toFixed(2);
-  const netRoiStr = isNaN(a.netRoi)?'-':a.netRoi.toFixed(2);
-  parts.push(`花了 <b>${a.spend.toFixed(0)}元</b>，成交 <b>${a.deals}笔</b>，ROI=<b>${roiStr}</b>，净ROI=<b>${netRoiStr}</b>（目标${a.targetRoi}）`);
-  if(a.trendLabel !== '平稳'){
-    parts.push(`，趋势<b class="trend-${a.trendLabel==='上升'?'up':'down'}">${a.trendLabel}</b>`);
-  }
-  if(a.status==='try'){
-    if(a.spend < params.minSpend) parts.push(`，花费未达淘汰门槛${params.minSpend}元，<b>先给量到${params.minSpend}元再判</b>`);
-    else parts.push(`，达到门槛但成交不足${params.minDeals}笔，<b>继续给量探索</b>`);
+  parts.push(`曝光 <b>${a.impr}</b>，点击 <b>${a.clicks}</b>，实际CTR=<b>${ctr}</b>，后验CTR=<b>${ctrMean}</b>，95%区间=<b>${ci}</b>`);
+  if(a.bestId) parts.push(`，当前好款=<b>${a.bestId}</b>`);
+  if(a.status==='stop'){
+    if(a.elimRule && a.elimRule.startsWith('第')) parts.push(`，${a.actionDetail}`);
+    else parts.push(`，系统有 <b>${(a.loseProb*100).toFixed(1)}%</b> 把握认为它点击率低于当前好款，达到淘汰线 <b>${(params.elimConfidence*100).toFixed(0)}%</b>`);
   } else if(a.status==='go'){
-    parts.push(`，<b>${(a.pTarget*100).toFixed(0)}%把握</b>能达标，直接加预算`);
-  } else if(a.status==='stop'){
-    if(a.elimRule && a.elimRule.includes('无展现')){
-      parts.push(`，测了 <b>${a.paidDays}天</b>花 <b>${a.spend.toFixed(0)}元</b> 却 <b>0展现</b>，商品无法曝光，直接淘汰【${a.elimRule}】`);
-    } else if(a.deals===0){
-      parts.push(`，花${a.spend.toFixed(0)}元<b>0成交</b>，直接淘汰【${a.elimRule}】`);
-    } else {
-      parts.push(`，后验把握度不足，与最优臂差距显著 → 关停【${a.elimRule}】`);
-    }
+    parts.push(`，它是当前后验点击率最高的臂，保留继续给量`);
+  } else if(a.status==='challenge'){
+    parts.push(`，它是最强挑战者之一，预算应优先保留给它继续和当前好款对比`);
+  } else if(a.status==='stuck'){
+    parts.push(`，全站推广给量不足，暂不参与CTR淘汰，建议单独重测或调整出价/计划`);
+  } else if(a.status==='try'){
+    parts.push(`，样本未达到最小曝光 <b>${params.minImpr}</b>，先不淘汰`);
   } else {
-    parts.push(`，把握度 <b>${(a.pTarget*100).toFixed(0)}%</b>，定不下来 → 继续测`);
+    parts.push(`，低于好款的把握为 <b>${(a.loseProb*100).toFixed(1)}%</b>，还没到淘汰线`);
   }
   return parts.join('');
 }
@@ -951,7 +839,6 @@ function buildReason(a, params){
 /* ---------- 渲染 ---------- */
 function render(params){
   CURRENT_PARAMS = params;
-  const useGaussian = params.useGaussian !== false;
   RESULT = evaluate(RESULT_ARMS, params);
   $('placeholder').style.display='none';
   $('results').style.display='block';
@@ -961,67 +848,64 @@ function render(params){
 
   // ===== 今日操作清单 (第一眼) =====
   const go=RESULT.filter(a=>a.status==='go');
+  const challenge=RESULT.filter(a=>a.status==='challenge');
   const stop=RESULT.filter(a=>a.status==='stop');
   const wait=RESULT.filter(a=>a.status==='wait');
   const tryy=RESULT.filter(a=>a.status==='try');
+  const stuck=RESULT.filter(a=>a.status==='stuck');
   const todoItems=[];
   if(go.length){
-    const ids=go.map(a=>a.id).slice(0,5).join('、');
-    const bud=go.reduce((s,a)=>s+a.budget,0);
-    todoItems.push(`<div class="todo-item add"><div class="act">🟢 加预算</div><div class="desc">给 <b>${go.length}</b> 个主推臂加预算共 <b>${bud.toFixed(0)}元</b>，P(ROI≥目标)≥${(Math.min(...go.map(a=>a.pTarget))*100).toFixed(0)}%</div><div class="ids">${ids}${go.length>5?'...':''}</div></div>`);
+    const best = go[0];
+    todoItems.push(`<div class="todo-item add"><div class="act">🟢 当前好款</div><div class="desc">后验点击率最高，作为本轮对比基准</div><div class="ids">${best.id} · 后验CTR ${(best.ctrMean*100).toFixed(2)}%</div></div>`);
+  }
+  if(challenge.length){
+    todoItems.push(`<div class="todo-item keep"><div class="act">🟡 最强挑战者</div><div class="desc"><b>${challenge.length}</b> 个臂最可能超过当前好款，预算优先保留</div><div class="ids">${challenge.map(a=>`${a.id}(${(a.ctrMean*100).toFixed(2)}%)`).join('、')}</div></div>`);
   }
   if(stop.length){
-    const ids=stop.map(a=>a.id).slice(0,5).join('、');
-    todoItems.push(`<div class="todo-item stop"><div class="act">🔴 关停</div><div class="desc">关停 <b>${stop.length}</b> 个打不过最优的臂，释放预算</div><div class="ids">${ids}${stop.length>5?'...':''}</div></div>`);
+    const ids=stop.map(a=>`${a.id}(${(a.loseProb*100).toFixed(1)}%)`).slice(0,5).join('、');
+    const stopDesc = `按分轮策略淘汰 <b>${stop.length}</b> 个臂，最终只保留当前好款`;
+    todoItems.push(`<div class="todo-item stop"><div class="act">🔴 分轮淘汰</div><div class="desc">${stopDesc}</div><div class="ids">${ids}${stop.length>5?'...':''}</div></div>`);
   }
   if(wait.length){
-    todoItems.push(`<div class="todo-item keep"><div class="act">🟡 维持</div><div class="desc"><b>${wait.length}</b> 个臂把握度未定，维持预算观察 1-2 天</div><div class="ids">${wait.slice(0,3).map(a=>a.id).join('、')}${wait.length>3?'...':''}</div></div>`);
+    todoItems.push(`<div class="todo-item keep"><div class="act">🟡 继续测</div><div class="desc"><b>${wait.length}</b> 个臂尚未达到淘汰把握度，继续观察</div><div class="ids">${wait.slice(0,3).map(a=>a.id).join('、')}${wait.length>3?'...':''}</div></div>`);
   }
   if(tryy.length){
-    const hasLowerRoi = tryy.some(a=>a.action==='降投产');
-    const lowerIds = tryy.filter(a=>a.action==='降投产').map(a=>a.id);
-    const exploreIds = tryy.filter(a=>a.action!=='降投产').map(a=>a.id);
-    if(hasLowerRoi){
-      const suggestions = tryy.filter(a=>a.action==='降投产').map(a=>`${a.id}: ${a.suggestion}`).join('；');
-      todoItems.push(`<div class="todo-item try"><div class="act">🟠 降投产</div><div class="desc"><b>${lowerIds.length}</b> 个款有点击但0成交/烧不动，降投产比扩人群试探</div><div class="ids">${suggestions}</div></div>`);
-    }
-    if(exploreIds.length){
-      todoItems.push(`<div class="todo-item try"><div class="act">🟠 给量</div><div class="desc"><b>${exploreIds.length}</b> 个臂样本不足，提高出价获取曝光</div><div class="ids">${exploreIds.slice(0,3).join('、')}${exploreIds.length>3?'...':''}</div></div>`);
-    }
+    todoItems.push(`<div class="todo-item try"><div class="act">🟠 补曝光</div><div class="desc"><b>${tryy.length}</b> 个臂曝光不足 ${params.minImpr}，先不淘汰</div><div class="ids">${tryy.slice(0,3).map(a=>a.id).join('、')}${tryy.length>3?'...':''}</div></div>`);
+  }
+  if(stuck.length){
+    todoItems.push(`<div class="todo-item stuck"><div class="act">🟣 跑不动</div><div class="desc"><b>${stuck.length}</b> 个臂全站推广给量不足，不参与CTR淘汰</div><div class="ids">${stuck.slice(0,3).map(a=>a.id).join('、')}${stuck.length>3?'...':''}</div></div>`);
   }
   if(!todoItems.length) todoItems.push(`<div class="todo-item"><div class="act">无数据</div><div class="desc">该分组无商品ID</div></div>`);
   $('todoGrid').innerHTML = todoItems.join('');
 
   // 统计行
   const totalSpend=RESULT.reduce((s,a)=>s+a.spend,0);
-  const totalDeals=RESULT.reduce((s,a)=>s+a.deals,0);
-  const avgRoi=totalSpend>0?RESULT.reduce((s,a)=>s+a.gmv,0)/totalSpend:0;
-  const totalNetGmv=RESULT.reduce((s,a)=>s+a.netGmv,0);
-  const avgNetRoi=totalSpend>0&&totalNetGmv>0?totalNetGmv/totalSpend:0;
-  const hasShift = RESULT.some(a=>a.shiftDetected);
+  const totalImpr=RESULT.reduce((s,a)=>s+a.impr,0);
+  const totalClicks=RESULT.reduce((s,a)=>s+a.clicks,0);
+  const overallCtr=totalImpr>0?totalClicks/totalImpr:0;
+  const best = go[0];
   $('statRow').innerHTML = `
     <span>商品ID(臂): <b>${RESULT.length}</b></span>
-    <span>🟢主推: <b style="color:var(--green)">${go.length}</b></span>
-    <span>🟡维持: <b style="color:var(--cyan)">${wait.length}</b></span>
-    <span>🟠观察: <b style="color:var(--amber)">${tryy.length}</b></span>
+    <span>当前好款: <b style="color:var(--green)">${best?best.id:'-'}</b></span>
+    <span>🟡挑战者: <b style="color:var(--cyan)">${challenge.length}</b></span>
+    <span>🟡继续测: <b style="color:var(--cyan)">${wait.length}</b></span>
+    <span>🟠补曝光: <b style="color:var(--amber)">${tryy.length}</b></span>
+    <span>🟣跑不动: <b style="color:#8b5cf6">${stuck.length}</b></span>
     <span>🔴淘汰: <b style="color:var(--red)">${stop.length}</b></span>
+    <span>总曝光: <b>${totalImpr}</b></span>
+    <span>总点击: <b>${totalClicks}</b></span>
+    <span>整体CTR: <b>${(overallCtr*100).toFixed(2)}%</b></span>
     <span>总花费: <b>${totalSpend.toFixed(0)}元</b></span>
-    <span>总成交: <b>${totalDeals}笔</b></span>
-    <span>整体ROI: <b>${avgRoi.toFixed(2)}</b></span>
-    <span>净ROI: <b>${avgNetRoi.toFixed(2)}</b></span>
-    <span>漂移: <b style="color:${hasShift?'var(--amber)':'var(--muted)'}">${hasShift?'已检测':'无'}</b></span>
+    <span>淘汰线: <b>${(params.elimConfidence*100).toFixed(0)}%</b></span>
   `;
 
   // 简表
-  const lightMap={go:'light go',wait:'light wait',try:'light try',stop:'light stop'};
-  const textMap={go:'主推',wait:'继续测',try:'降投产试',stop:'淘汰'};
+  const lightMap={go:'light go',challenge:'light challenge',wait:'light wait',try:'light try',stuck:'light stuck',stop:'light stop'};
+  const textMap={go:'当前好款',challenge:'挑战者',wait:'继续测',try:'补曝光',stuck:'跑不动',stop:'淘汰'};
   $('decBody').innerHTML = RESULT.map((a,i)=>{
-    const roiCls = (!isNaN(a.roi)&&a.roi>=a.targetRoi)?'color:var(--green)':(!isNaN(a.roi)&&a.roi<a.targetRoi*0.7?'color:var(--red)':'');
-    const netRoiCls = (!isNaN(a.netRoi)&&a.netRoi>=a.targetRoi)?'color:var(--green)':(!isNaN(a.netRoi)&&a.netRoi<a.targetRoi*0.7?'color:var(--red)':'');
     const trendIcon = a.trendLabel==='上升'?'↑':a.trendLabel==='下降'?'↓':'→';
     const trendCls = a.trendLabel==='上升'?'trend-up':a.trendLabel==='下降'?'trend-down':'trend-flat';
-    const sugStyle = a.suggestion && (a.suggestion.includes('→') || a.suggestion.includes('加到'))
-      ? 'color:var(--amber);font-weight:700' : 'color:var(--muted)';
+    const sugStyle = a.status==='stop' ? 'color:var(--red);font-weight:700' : 'color:var(--muted)';
     return `<tr class="fade-in ${a.status==='stop'?'stopped':''}" data-i="${i}">
       <td>
         <div class="id-name">${a.id}</div>
@@ -1038,30 +922,17 @@ function render(params){
       <td colspan="7" style="padding:0;border:0">
         <div class="detail" id="detail-${i}">
           <div class="row">
-            <div><span class="k">花费</span><span class="v">${a.spend.toFixed(0)}元</span></div>
-            <div><span class="k">交易额</span><span class="v">${a.gmv.toFixed(0)}元</span></div>
-            <div><span class="k">净交易额</span><span class="v">${a.netGmv.toFixed(0)}元</span></div>
-            <div><span class="k">成交</span><span class="v">${a.deals}笔</span></div>
-            <div><span class="k">净成交</span><span class="v">${a.netDeals}笔</span></div>
-            <div><span class="k">ROI</span><span class="v" style="${roiCls}">${isNaN(a.roi)?'-':a.roi.toFixed(3)}</span></div>
-            <div><span class="k">净ROI</span><span class="v" style="${netRoiCls}">${isNaN(a.netRoi)?'-':a.netRoi.toFixed(3)}</span></div>
-            <div><span class="k">CTR</span><span class="v">${isNaN(a.ctr)?'-':(a.ctr*100).toFixed(2)}%</span></div>
-            <div><span class="k">CVR</span><span class="v">${isNaN(a.cvr)?'-':(a.cvr*100).toFixed(2)}%</span></div>
-            <div><span class="k">展现</span><span class="v">${a.impr}</span></div>
+            <div><span class="k">曝光</span><span class="v">${a.impr}</span></div>
             <div><span class="k">点击</span><span class="v">${a.clicks}</span></div>
-          </div>
-          <div class="row">
-            <div><span class="k">达标天数</span><span class="v">${a.hitDays}/${a.paidDays}天</span></div>
-            <div><span class="k">无展现天</span><span class="v" style="color:${a.noImpDays>0?'var(--red)':'var(--muted)'}">${a.noImpDays}天</span></div>
-            <div><span class="k">趋势</span><span class="v ${trendCls}">${trendIcon} ${a.trendLabel} (斜率${a.trendSlope.toFixed(2)})</span></div>
-            <div><span class="k">日ROI方差</span><span class="v">${isNaN(a.dailyVar)?'-':a.dailyVar.toFixed(2)}</span></div>
-            <div><span class="k">P(ROI≥目标)</span><span class="v">${(a.pTarget*100).toFixed(0)}%</span></div>
-            <div><span class="k">后验均值</span><span class="v">${a.postMean.toFixed(3)}</span></div>
-            <div><span class="k">95%CI</span><span class="v">[${a.postLo.toFixed(2)}, ${a.postHi.toFixed(2)}]</span></div>
-            <div><span class="k">有效样本</span><span class="v">${a.nEff.toFixed(1)}</span></div>
-            <div><span class="k">环境漂移</span><span class="v" style="color:${a.shiftDetected?'var(--amber)':'var(--muted)'}">${a.shiftDetected?'已检测':'无'}</span></div>
+            <div><span class="k">实际CTR</span><span class="v">${isNaN(a.ctr)?'-':(a.ctr*100).toFixed(2)}%</span></div>
+            <div><span class="k">后验CTR</span><span class="v">${(a.ctrMean*100).toFixed(2)}%</span></div>
+            <div><span class="k">95%区间</span><span class="v">[${(a.ctrLo*100).toFixed(2)}%, ${(a.ctrHi*100).toFixed(2)}%]</span></div>
+            <div><span class="k">低于好款</span><span class="v" style="color:${a.loseProb>=params.elimConfidence?'var(--red)':'var(--muted)'}">${(a.loseProb*100).toFixed(1)}%</span></div>
+            <div><span class="k">当前好款</span><span class="v">${a.bestId||'-'}</span></div>
+            <div><span class="k">花费</span><span class="v">${a.spend.toFixed(0)}元</span></div>
+            <div><span class="k">剩余预算</span><span class="v">${a.budget.toFixed(0)}元</span></div>
             <div><span class="k">淘汰依据</span><span class="v" style="color:${a.elimRule&&a.elimRule!=='—'?'var(--red)':'var(--muted)'}">${a.elimRule||'—'}</span></div>
-            <div><span class="k">后验模型</span><span class="v">${useGaussian?'高斯NIG':'Beta'}</span></div>
+            <div><span class="k">后验模型</span><span class="v">CTR Beta</span></div>
           </div>
           <div class="row">
             <div><span class="k">后台调整</span><span class="v" style="color:var(--amber);font-weight:700">${a.suggestion||'—'}</span></div>
@@ -1172,7 +1043,7 @@ function renderTrendTable(){
 
   // 表体
   const lightMap={go:'light go',wait:'light wait',try:'light try',stop:'light stop'};
-  const textMap={go:'主推',wait:'继续测',try:'降投产试',stop:'淘汰'};
+  const textMap={go:'当前好款',wait:'继续测',try:'补曝光',stop:'淘汰'};
   let bodyHtml = rows.map(r=>{
     let h = `<tr>
       <td class="id-cell"><div class="id-name">${r.id}</div><div class="nm" title="${r.name}">${r.name||'(无名称)'}</div></td>
@@ -1330,7 +1201,7 @@ function renderExposureCorrelationTable(){
   </tr>`;
 
   const lightMap={go:'light go',wait:'light wait',try:'light try',stop:'light stop'};
-  const textMap={go:'主推',wait:'继续测',try:'降投产试',stop:'淘汰'};
+  const textMap={go:'当前好款',wait:'继续测',try:'补曝光',stop:'淘汰'};
   body.innerHTML = rows.map(r=>{
     const impr = r.dates.map(d=>d.impr);
     const corr = {};
@@ -1381,21 +1252,12 @@ function renderExposureCorrelationTable(){
 $('runBtn').addEventListener('click', ()=>{
   const params = {
     group: $('group').value,
-    targetRoi: parseFloat($('targetRoi').value),
-    ctrThr: parseFloat($('ctrThr').value),
-    cvrThr: parseFloat($('cvrThr').value),
-    impThr: parseFloat($('impThr').value),
-    minDeals: parseInt($('minDeals').value),
-    minSpend: parseFloat($('minSpend').value),
-    minDays: 2,
-    burnMinDaily: parseFloat($('burnMinDaily').value) || 3,
-    reliableImpr: parseFloat($('reliableImpr').value) || 300,
-    reliableClicks: parseFloat($('reliableClicks').value) || 10,
-    totalBudget: parseFloat($('totalBudget').value),
-    perArmBudget: parseFloat($('perArmBudget').value),
-    decayRate: parseFloat($('decayRate').value) || 0.15,
-    elimDelta: parseFloat($('elimDelta').value) || 0.05,
-    useGaussian: $('posteriorType').value === 'gaussian',
+    testDays: parseInt($('testDays').value) || 7,
+    perArmBudget: parseFloat($('perArmBudget').value) || 300,
+    elimConfidence: (parseFloat($('elimConfidence').value) || 95) / 100,
+    minImpr: parseFloat($('minImpr').value) || 100,
+    reliableImpr: parseFloat($('minImpr').value) || 100,
+    reliableClicks: 10,
   };
   $('runStatus').textContent = '⏳ 运行中...';
   setTimeout(()=>{
@@ -1403,8 +1265,8 @@ $('runBtn').addEventListener('click', ()=>{
       RESULT_ARMS = aggregate(RAW, params.group, params);
       if(!RESULT_ARMS.length) throw new Error(`分组 "${params.group}" 无商品ID`);
       render(params);
-      $('runStatus').innerHTML = `<span class="ok">✓ 完成</span> · ${RESULT_ARMS.length} 个商品ID(臂) · ${params.useGaussian?'NIG':'Beta'}后验`;
-    }catch(e){ $('runStatus').innerHTML = `<span class="err">✗ ${e.message}</span>`; }
+      $('runStatus').innerHTML = `<span class="ok">✓ 完成</span> · ${RESULT_ARMS.length} 个商品ID(臂) · CTR 后验分轮淘汰`;
+    }catch(e){ console.error(e); $('runStatus').innerHTML = `<span class="err">✗ ${e.message}</span>`; }
   },50);
 });
 </script>
