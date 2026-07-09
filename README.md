@@ -112,22 +112,97 @@ Excel 中需要包含以下常用字段：
 
 ## Docker 部署
 
-构建镜像：
+本项目的 Docker 镜像只部署静态前端页面，由 Nginx 提供服务：
+
+- 容器内监听端口：`7021`
+- 页面目录：`/usr/share/nginx/html`
+- 默认首页：`index.html`
+- 教程页面：`/guide.html`
+
+### 本地构建镜像
 
 ```bash
 docker build -t bandit-workbench .
 ```
 
-运行容器：
+### 本地运行容器
+
+前台运行，停止终端即停止容器：
 
 ```bash
 docker run --rm -p 7021:7021 bandit-workbench
 ```
 
-访问：
+后台运行：
+
+```bash
+docker run -d --name bandit-workbench -p 7021:7021 bandit-workbench
+```
+
+访问地址：
+
+```text
+http://localhost:7021
+```
+
+教程页：
+
+```text
+http://localhost:7021/guide.html
+```
+
+### 停止后台容器
+
+```bash
+docker stop bandit-workbench
+```
+
+如需重新运行同名容器，先删除旧容器：
+
+```bash
+docker rm bandit-workbench
+```
+
+### 使用自定义宿主机端口
+
+如果宿主机 `7021` 端口已被占用，可以映射到其他端口，例如：
+
+```bash
+docker run --rm -p 8080:7021 bandit-workbench
+```
+
+此时访问：
 
 ```text
 http://localhost:8080
+```
+
+### Docker Hub 自动构建
+
+仓库包含 GitHub Actions 工作流 `.github/workflows/docker-build-push.yml`：
+
+- 推送到 `master` 分支时，只构建镜像，不推送。
+- 推送到 `main` 分支时，构建并推送到 Docker Hub。
+- 镜像标签：`2.0` 和 `latest`。
+
+启用自动推送前，需要在 GitHub 仓库 Secrets 中配置：
+
+| Secret | 说明 |
+| --- | --- |
+| `DOCKER_HUB_USERNAME` | Docker Hub 用户名 |
+| `DOCKER_HUB_TOKEN` | Docker Hub Access Token |
+
+镜像名格式：
+
+```text
+<DOCKER_HUB_USERNAME>/smart-product-testing-bandit:latest
+```
+
+拉取并运行远程镜像示例：
+
+```bash
+docker pull <DOCKER_HUB_USERNAME>/smart-product-testing-bandit:latest
+docker run --rm -p 7021:7021 <DOCKER_HUB_USERNAME>/smart-product-testing-bandit:latest
 ```
 
 ## 分析逻辑概览
