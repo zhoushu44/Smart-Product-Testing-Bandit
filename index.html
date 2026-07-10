@@ -178,10 +178,10 @@
     <label class="drop" id="drop">
       <div class="ico">⬆</div>
       <div>
-        <h3 id="dropTitle">拖拽 Excel 到这里，或点击选择</h3>
-        <p>商品推广 / 全站推广分天数据 .xlsx · 数据只在本机浏览器处理</p>
+        <h3 id="dropTitle">拖拽 Excel/CSV 到这里，或点击选择</h3>
+        <p>商品推广 / 全站推广分天数据 .xlsx / .csv · 数据只在本机浏览器处理</p>
       </div>
-      <input type="file" id="file" accept=".xlsx,.xls" />
+      <input type="file" id="file" accept=".xlsx,.xls,.csv" />
     </label>
     <div id="fileInfo" style="margin-top:8px;font-family:var(--mono);font-size:12px"></div>
   </div>
@@ -286,6 +286,12 @@
         </table>
       </div>
     </div>
+
+    <!-- 今日总结 -->
+    <div class="card" id="summaryCard" style="display:none">
+      <h4><span class="dot"></span>今日总结 · 操作建议汇总</h4>
+      <div id="summaryContent"></div>
+    </div>
   </div>
 
   <div id="placeholder" class="card empty">上传 Excel 后此处显示测款结果</div>
@@ -324,45 +330,145 @@ const drop=$('drop');
 drop.addEventListener('drop', e=>{ if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
 
 function handleFile(file){
-  $('fileInfo').innerHTML = `<span class="pulse">⏳ 解析中: ${file.name} ...</span>`;
+  const fname = file.name;
+  const fsize = (file.size / 1024).toFixed(1);
+  $('fileInfo').innerHTML = `<span class="pulse">⏳ 正在读取: ${fname} (${fsize} KB)</span>`;
+
   const reader = new FileReader();
-  reader.onload = ev=>{
+  reader.onprogress = function(ev) {
+    if(ev.lengthComputable){
+      const pct = Math.round(ev.loaded / ev.total * 100);
+      $('fileInfo').innerHTML = `<span class="pulse">⏳ 读取进度: ${pct}%</span>`;
+    }
+  };
+
+  reader.onload = function(ev) {
     try{
-      const wb = XLSX.read(new Uint8Array(ev.target.result), {type:'array', cellDates:true});
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
+      $('fileInfo').innerHTML = `<span class="pulse">⏳ 正在解析数据...</span>`;
+      let wb;
+      const arr = new Uint8Array(ev.target.result);
+      const isCsv = fname.toLowerCase().endsWith('.csv');
+
+      if(isCsv){
+        // CSV 编码检测：UTF-8 优先，失败则用 GBK
+        let text = '';
+        let encoding = 'utf-8';
+
+        // 尝试 UTF-8
+        try{
+          const decoder = new TextDecoder('utf-8', {fatal: true});
+          text = decoder.decode(arr);
+          // 检查是否有乱码（替换字符）
+          const replCount = (text.match(/\uFFFD/g) || []).length;
+          if(replCount > 10){
+            console.log(`UTF-8 解码有 ${replCount} 个替换字符，尝试 GBK`);
+            throw new Error('可能不是 UTF-8');
+          }
+          encoding = 'utf-8';
+        }catch(e){
+          // 尝试 GBK（大部分中文 CSV 用 GBK/GB18030）
+          try{
+            const decoder = new TextDecoder('gbk', {fatal: false});
+            text = decoder.decode(arr);
+            encoding = 'gbk';
+            console.log('使用 GBK 解码成功');
+          }catch(e2){
+            console.error('编码检测失败:', e2);
+            throw new Error('无法识别文件编码，请转为 UTF-8 后重试');
+          }
+        }
+
+        if(!text || text.trim().length === 0){
+          throw new Error('文件内容为空');
+        }
+
+        console.log(`CSV 解析: 编码=${encoding}, 字符数=${text.length}`);
+        wb = XLSX.read(text, {type: 'string', cellDates: true});
+      }else{
+        // Excel 文件直接用二进制解析
+        wb = XLSX.read(arr, {type: 'array', cellDates: true});
+      }
+
+      $('fileInfo').innerHTML = `<span class="pulse">⏳ 正在提取数据...</span>`;
+
+      // 提取第一个工作表的数据
+      const sheetName = wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {defval: ''});
+
+      if(!rows || rows.length === 0){
+        throw new Error('未找到数据行，请检查文件格式');
+      }
+
+      console.log(`解析成功: ${rows.length} 行数据`);
+
       RAW = rows;
       COLS = mapCols(rows);
-      if(!COLS.id || !COLS.spend) throw new Error('未找到必要列：商品ID / 总花费(元)');
-      GROUPS = {};
-      rows.forEach(r=>{
-        let g = r[COLS.group];
-        g = (g==null||['','nan','NaN','-','NaT'].includes(String(g).trim()))?'未分组':String(g).trim();
-        GROUPS[g] = (GROUPS[g]||0)+1;
+
+      // 显示列名匹配结果
+      const matchedCols = [];
+      const missingCols = [];
+      ['id','spend','clicks','impr','gmv','deals'].forEach(k => {
+        if(COLS[k]) matchedCols.push(`${k}=${COLS[k]}`);
+        else missingCols.push(k);
       });
-      const sel = $('group'); sel.innerHTML='';
-      const order = ['测试','未分组',...Object.keys(GROUPS).filter(g=>!['测试','未分组'].includes(g))];
-      order.forEach(g=>{ if(GROUPS[g]==null) return; const o=document.createElement('option'); o.value=g; o.textContent=`${g} (${GROUPS[g]} 条)`; sel.appendChild(o); });
-      sel.value = GROUPS['测试']!=null?'测试':sel.options[0].value;
-      sel.disabled=false;
+      console.log('已匹配列:', matchedCols.join(', '));
+      if(missingCols.length) console.warn('缺失列:', missingCols.join(', '));
+
+      if(!COLS.id){
+        throw new Error('未找到商品ID列，请检查列名是否为：商品ID / 主体ID / ID');
+      }
+      if(!COLS.spend){
+        throw new Error('未找到花费列，请检查列名是否为：总花费(元) / 花费 / 消耗');
+      }
+
+      GROUPS = {};
+      rows.forEach(r => {
+        let g = r[COLS.group];
+        g = (g == null || ['','nan','NaN','-','NaT'].includes(String(g).trim())) ? '未分组' : String(g).trim();
+        GROUPS[g] = (GROUPS[g] || 0) + 1;
+      });
+
+      const sel = $('group');
+      sel.innerHTML = '';
+      const order = ['测试','未分组',...Object.keys(GROUPS).filter(g => !['测试','未分组'].includes(g))];
+      order.forEach(g => {
+        if(GROUPS[g] == null) return;
+        const o = document.createElement('option');
+        o.value = g;
+        o.textContent = `${g} (${GROUPS[g]} 条)`;
+        sel.appendChild(o);
+      });
+      sel.value = GROUPS['测试'] != null ? '测试' : sel.options[0].value;
+      sel.disabled = false;
       $('groupHint').textContent = `共 ${rows.length} 行 · ${Object.keys(GROUPS).length} 分组`;
-      $('runBtn').disabled=false;
-      const gidCount = new Set(rows.map(r=>String(r[COLS.id]||'').trim()).filter(Boolean)).size;
-      $('fileInfo').innerHTML = `<span class="ok">✓ 已解析</span> · ${file.name} · <b>${rows.length}</b> 行 · <b>${gidCount}</b> 个商品ID(臂) · ${Object.keys(GROUPS).length} 分组`;
-    }catch(err){ $('fileInfo').innerHTML = `<span class="err">✗ ${err.message}</span>`; }
+      $('runBtn').disabled = false;
+
+      const gidCount = new Set(rows.map(r => String(r[COLS.id] || '').trim()).filter(Boolean)).size;
+      $('fileInfo').innerHTML = `<span class="ok">✓ 已解析</span> · ${fname} · <b>${rows.length}</b> 行 · <b>${gidCount}</b> 个商品ID · ${Object.keys(GROUPS).length} 分组`;
+
+    }catch(err){
+      console.error('解析失败:', err);
+      $('fileInfo').innerHTML = `<span class="err">✗ ${err.message}</span>`;
+    }
   };
+
+  reader.onerror = function() {
+    $('fileInfo').innerHTML = `<span class="err">✗ 文件读取失败</span>`;
+  };
+
   reader.readAsArrayBuffer(file);
 }
 
 function mapCols(rows){
   return {
     date:findCol(rows,['日期','date','Date','统计日期','时间','投放日期']),
-    id:findCol(rows,['商品ID','商品id','商品Id','ID','id','Id']),
-    name:findCol(rows,['商品名称','名称','商品','商品标题']),
-    bid:findCol(rows,['出价方式','投产比','目标投产比']),
+    id:findCol(rows,['商品ID','商品id','商品Id','ID','id','Id','主体ID']),
+    name:findCol(rows,['商品名称','名称','商品','商品标题','主体名称']),
+    bid:findCol(rows,['出价方式','投产比','目标投产比','投入产出比']),
     group:findCol(rows,['分组','推广分组','组']),
     spend:findCol(rows,['总花费(元)','总花费','花费','花费(元)','消耗','消耗(元)']),
-    gmv:findCol(rows,['交易额(元)','交易额','成交金额','GMV','gmv','销售额','销售额(元)']),
-    deals:findCol(rows,['成交笔数','成交数','成交件数','订单数','笔数']),
+    gmv:findCol(rows,['交易额(元)','交易额','成交金额','GMV','gmv','销售额','销售额(元)','总成交金额']),
+    deals:findCol(rows,['成交笔数','成交数','成交件数','订单数','笔数','总成交笔数']),
     clicks:findCol(rows,['点击量','点击','点击数','点击次数']),
     impr:findCol(rows,['曝光量','曝光','展现量','展现','展现次数']),
     netGmv:findCol(rows,['净交易额(元)','净交易额','净成交金额','净GMV']),
@@ -1010,9 +1116,10 @@ function render(params){
     };
   });
 
-  // 分天趋势表 + 曝光相关性诊断
+  // 分天趋势表 + 曝光相关性诊断 + 今日总结
   renderTrendTable();
   renderExposureCorrelationTable();
+  renderSummary();
 }
 
 /* ---------- 分天趋势表 ---------- */
@@ -1342,6 +1449,144 @@ function renderExposureCorrelationTable(){
       <td style="text-align:left;min-width:210px">${summary}</td>
     </tr>`;
   }).join('');
+}
+
+/* ---------- 今日总结 ---------- */
+function renderSummary(){
+  const card = $('summaryCard');
+  const content = $('summaryContent');
+  if(!card || !content) return;
+
+  const source = (RESULT && RESULT.length) ? RESULT : RESULT_ARMS;
+  if(!source || !source.length){
+    card.style.display = 'none';
+    return;
+  }
+
+  // 统计各状态数量
+  const goArms = source.filter(a => a.status === 'go');
+  const challengeArms = source.filter(a => a.status === 'challenge');
+  const stopArms = source.filter(a => a.status === 'stop');
+  const stuckArms = source.filter(a => a.status === 'stuck');
+  const waitArms = source.filter(a => a.status === 'wait' || a.status === 'try');
+
+  if(stopArms.length === 0 && goArms.length === 0 && challengeArms.length === 0){
+    card.style.display = 'none';
+    return;
+  }
+
+  card.style.display = 'block';
+
+  const params = CURRENT_PARAMS || {};
+  const budget = params.perArmBudget || 300;
+
+  // 计算释放的预算
+  const releasedBudget = stopArms.length * budget;
+  const stuckBudget = stuckArms.length * budget;
+
+  let html = '<div style="display:flex;flex-direction:column;gap:16px">';
+
+  // 1. 淘汰情况
+  if(stopArms.length > 0){
+    html += `<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);border-radius:10px;padding:14px 16px">
+      <div style="font-family:var(--disp);font-weight:700;font-size:14px;color:var(--red);margin-bottom:8px">📊 已淘汰 ${stopArms.length} 款</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.6">
+        释放预算约 <b style="color:var(--text)">¥${releasedBudget.toFixed(0)}</b>，建议在后台暂停这些计划的投放。
+        ${stopArms.length <= 5 ? `<div style="margin-top:6px">商品ID: ${stopArms.map(a => a.id).join('、')}</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  // 2. 暂停重测
+  if(stuckArms.length > 0){
+    html += `<div style="background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.3);border-radius:10px;padding:14px 16px">
+      <div style="font-family:var(--disp);font-weight:700;font-size:14px;color:#8b5cf6;margin-bottom:8px">⚠️ 曝光不足 ${stuckArms.length} 款</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.6">
+        这些款测了多天曝光仍然很少，建议提高出价或换计划后重新开一轮测试。
+        ${stuckArms.length <= 5 ? `<div style="margin-top:6px">商品ID: ${stuckArms.map(a => a.id).join('、')}</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  // 3. 预算调整建议
+  if(goArms.length > 0 || challengeArms.length > 0){
+    html += `<div style="background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.3);border-radius:10px;padding:14px 16px">
+      <div style="font-family:var(--disp);font-weight:700;font-size:14px;color:var(--cyan);margin-bottom:8px">💰 预算调整建议</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.6">`;
+
+    if(goArms.length > 0){
+      const go = goArms[0];
+      const spent = go.spend || 0;
+      const remainBudget = Math.max(0, budget - spent);
+      const suggestBudget = Math.round(budget * 0.7); // 建议验证预算 = 总预算70%
+      const needAdd = Math.max(0, suggestBudget - spent);
+
+      html += `<div style="margin-bottom:8px">
+        <span style="color:var(--green);font-weight:700">当前好款:</span> 
+        ${go.id} (CTR ${(go.ctrScore*100).toFixed(2)}%，已花费¥${spent.toFixed(0)})
+        <div style="margin-top:4px;color:var(--text)">
+          建议在后台把预算提高到 <b style="color:var(--cyan)">¥${suggestBudget}</b>，
+          ${needAdd > 0 ? `还需增加约 <b style="color:var(--cyan)">¥${needAdd}</b>` : '已达到建议预算'}，
+          继续验证点击率稳定性。
+        </div>
+      </div>`;
+    }
+
+    if(challengeArms.length > 0){
+      html += `<div style="margin-bottom:8px">
+        <span style="color:var(--amber);font-weight:700">挑战者:</span> 
+        ${challengeArms.map(a => {
+          const spent = a.spend || 0;
+          const suggestBudget = Math.round(budget * 0.5); // 挑战者建议总预算50%
+          const needAdd = Math.max(0, suggestBudget - spent);
+          return `${a.id} (CTR ${(a.ctrScore*100).toFixed(2)}%，建议¥${suggestBudget}${needAdd > 0 ? `，+¥${needAdd}` : ''})`;
+        }).join('、')}
+        <div style="margin-top:4px;color:var(--text)">这些款最可能超过当前好款，建议保留预算继续对比。</div>
+      </div>`;
+    }
+
+    if(stopArms.length > 0){
+      html += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        已淘汰 ${stopArms.length} 款释放约 <b style="color:var(--cyan)">¥${releasedBudget.toFixed(0)}</b> 预算，
+        建议在后台调整预算分配，把淘汰款的预算加到好款和挑战者上。
+      </div>`;
+    }
+
+    html += `</div></div>`;
+  }
+
+  // 4. 继续测
+  if(waitArms.length > 0){
+    html += `<div style="background:rgba(139,156,172,.08);border:1px solid var(--border);border-radius:10px;padding:14px 16px">
+      <div style="font-family:var(--disp);font-weight:700;font-size:14px;color:var(--muted);margin-bottom:8px">⏳ 继续观察 ${waitArms.length} 款</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.6">
+        这些款暂时没有足够把握判断好坏，建议继续观察，等更多数据后再决定。
+      </div>
+    </div>`;
+  }
+
+  // 5. 操作清单
+  html += `<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:14px 16px">
+    <div style="font-family:var(--disp);font-weight:700;font-size:14px;color:var(--text);margin-bottom:10px">📋 今日操作清单</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.8">`;
+
+  const actions = [];
+  if(stopArms.length > 0) actions.push(`1. 在后台暂停 <b>${stopArms.length}</b> 个淘汰款的计划`);
+  if(stuckArms.length > 0) actions.push(`2. 提高出价或换计划，重新测试 <b>${stuckArms.length}</b> 个曝光不足的款`);
+  if(goArms.length > 0){
+    const go = goArms[0];
+    const suggestBudget = Math.round(budget * 0.7);
+    const needAdd = Math.max(0, suggestBudget - (go.spend || 0));
+    actions.push(`3. 给当前好款 <b>${go.id}</b> 增加预算至 <b>¥${suggestBudget}</b>${needAdd > 0 ? `（还需+¥${needAdd}）` : ''}，继续验证`);
+  }
+  if(challengeArms.length > 0) actions.push(`4. 保留 <b>${challengeArms.length}</b> 个挑战者的预算（各约¥${Math.round(budget*0.5)}），与好款对比`);
+  if(stopArms.length > 0) actions.push(`5. 把淘汰款释放的预算 (约¥${releasedBudget.toFixed(0)}) 加到好款和挑战者上`);
+
+  html += actions.join('<br>');
+  html += `</div></div>`;
+
+  html += '</div>';
+  content.innerHTML = html;
 }
 
 /* ---------- 运行 ---------- */

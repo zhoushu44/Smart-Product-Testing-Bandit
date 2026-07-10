@@ -37,5 +37,5 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ steps.image.outputs.name }}:8.0
+            ${{ steps.image.outputs.name }}:9.0
             ${{ steps.image.outputs.name }}:latest
