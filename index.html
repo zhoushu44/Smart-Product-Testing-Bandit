@@ -206,17 +206,12 @@
         <div class="hint">每个商品ID本轮最多可消耗</div>
       </div>
       <div class="fld">
-        <label>淘汰把握度(%)</label>
-        <input id="elimConfidence" type="number" step="1" value="95" />
-        <div class="hint">有多少把握比当前好款差才淘汰</div>
-      </div>
-      <div class="fld">
-        <label>最小曝光量</label>
+        <label>基础曝光量</label>
         <input id="minImpr" type="number" step="50" value="100" />
-        <div class="hint">低于此值只观察，不强淘汰</div>
+        <div class="hint">每款至少跑够多少曝光再判断</div>
       </div>
     </div>
-    <div class="hint" style="margin-top:10px">全站推广版：先识别跑不动，再对曝光足够的款做CTR后验分轮淘汰；预算优先给当前好款和最强挑战者。</div>
+    <div class="hint" style="margin-top:10px">科学测款版：前2天冷启动保护；第3天起按数据量自适应淘汰；挑战者按UCB识别；预算按探索价值加权分配；点击率使用时间衰减（近期权重更高）。</div>
     <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
       <button class="run" id="runBtn" disabled>开始测款</button>
       <span id="runStatus" class="muted" style="font-family:var(--mono);font-size:12px"></span>
@@ -360,13 +355,18 @@ function handleFile(file){
 
 function mapCols(rows){
   return {
-    date:findCol(rows,['日期']), id:findCol(rows,['商品ID','商品id']),
-    name:findCol(rows,['商品名称']), bid:findCol(rows,['出价方式']),
-    group:findCol(rows,['分组']), spend:findCol(rows,['总花费(元)','总花费']),
-    gmv:findCol(rows,['交易额(元)','交易额']), deals:findCol(rows,['成交笔数']),
-    clicks:findCol(rows,['点击量']), impr:findCol(rows,['曝光量']),
-    netGmv:findCol(rows,['净交易额(元)','净交易额']),
-    netDeals:findCol(rows,['净成交笔数']),
+    date:findCol(rows,['日期','date','Date','统计日期','时间','投放日期']),
+    id:findCol(rows,['商品ID','商品id','商品Id','ID','id','Id']),
+    name:findCol(rows,['商品名称','名称','商品','商品标题']),
+    bid:findCol(rows,['出价方式','投产比','目标投产比']),
+    group:findCol(rows,['分组','推广分组','组']),
+    spend:findCol(rows,['总花费(元)','总花费','花费','花费(元)','消耗','消耗(元)']),
+    gmv:findCol(rows,['交易额(元)','交易额','成交金额','GMV','gmv','销售额','销售额(元)']),
+    deals:findCol(rows,['成交笔数','成交数','成交件数','订单数','笔数']),
+    clicks:findCol(rows,['点击量','点击','点击数','点击次数']),
+    impr:findCol(rows,['曝光量','曝光','展现量','展现','展现次数']),
+    netGmv:findCol(rows,['净交易额(元)','净交易额','净成交金额','净GMV']),
+    netDeals:findCol(rows,['净成交笔数','净成交数','净笔数']),
   };
 }
 
@@ -457,12 +457,25 @@ function aggregate(rows, group, params){
     const netDeals=Object.values(p.daily).reduce((s,d)=>s+d.netDeals,0);
     const clicks=Object.values(p.daily).reduce((s,d)=>s+d.clicks,0);
     const impr=Object.values(p.daily).reduce((s,d)=>s+d.impr,0);
+
+    // 时间衰减加权的点击和曝光
+    let decayClicks=0, decayImpr=0;
+    dates.forEach(dt=>{
+      const d = p.daily[dt];
+      const daysAgo = (maxDateTs - parseDate(dt)) / 86400000;
+      const weight = Math.exp(-decayRate * daysAgo);
+      decayClicks += d.clicks * weight;
+      decayImpr += d.impr * weight;
+    });
+
     return {
       id:p.id, name:p.name, paidDays, hitDays, noImpDays, targetRoi:thrRoi,
       spend, gmv, netGmv, deals, netDeals, clicks, impr,
+      decayClicks, decayImpr,
       roi:spend>0?gmv/spend:NaN,
       netRoi:spend>0&&netGmv>0?netGmv/spend:NaN,
       ctr:impr>0?clicks/impr:NaN,
+      decayCtr:decayImpr>0?decayClicks/decayImpr:NaN,
       cvr:clicks>0?deals/clicks:NaN,
       daily:p.daily,
       totalDays: dates.length,
@@ -682,8 +695,11 @@ function evaluate(arms, params){
   const budget = params.perArmBudget || 0;
 
   const ev = arms.map(a => {
-    const alpha = a.clicks + 1;
-    const beta = Math.max(a.impr - a.clicks, 0) + 1;
+    // 使用时间衰减加权的点击和曝光
+    const dClicks = a.decayClicks || a.clicks;
+    const dImpr = a.decayImpr || a.impr;
+    const alpha = dClicks + 1;
+    const beta = Math.max(dImpr - dClicks, 0) + 1;
     const armSeed = 42 + a.id.split('').reduce((s,c)=>s+c.charCodeAt(0),0);
     const samples = betaSamples(alpha, beta, sampleN, armSeed);
     const sorted = [...samples].sort((x,y)=>x-y);
@@ -698,7 +714,7 @@ function evaluate(arms, params){
       ctrLo: q(0.025),
       ctrHi: q(0.975),
       ts: samples[Math.floor(seededRng(armSeed + 99)() * sampleN)],
-      nEff: a.impr,
+      nEff: dImpr,
       postMean: mean,
       postLo: q(0.025),
       postHi: q(0.975),
@@ -709,7 +725,7 @@ function evaluate(arms, params){
 
   ev.forEach(a=>{
     const lowSpend = budget > 0 ? a.spend <= budget * 0.10 : true;
-    a.isStuck = ((a.paidDays >= 2 && a.impr < 50 && lowSpend) || (a.paidDays >= 3 && a.impr < minImpr && lowSpend));
+    a.isStuck = (a.paidDays >= 5 && a.impr < minImpr && lowSpend);
   });
   const runnable = ev.filter(a => !a.isStuck);
   const candidates = runnable.filter(a => a.impr >= minImpr);
@@ -726,16 +742,41 @@ function evaluate(arms, params){
     a.winProb = best && a === best ? 1 : 1 - loseProb;
   });
   const sortedByCtr = [...runnable].sort((a,b)=>b.ctrMean-a.ctrMean);
-  const challengerIds = new Set(sortedByCtr.filter(a=>a !== best).slice(0,2).map(a=>a.id));
+  const sortedByUcb = [...runnable].filter(a=>a !== best).sort((a,b)=>{
+    const ucbA = a.ctrMean + 1.96 * Math.sqrt(a.ctrMean * (1 - a.ctrMean) / Math.max(a.impr, 1));
+    const ucbB = b.ctrMean + 1.96 * Math.sqrt(b.ctrMean * (1 - b.ctrMean) / Math.max(b.impr, 1));
+    return ucbB - ucbA;
+  });
+  const challengerIds = new Set(sortedByUcb.slice(0, Math.min(2, sortedByUcb.length)).map(a=>a.id));
+  runnable.forEach(a=>{
+    a.ucb = a.ctrMean + 1.96 * Math.sqrt(a.ctrMean * (1 - a.ctrMean) / Math.max(a.impr, 1));
+  });
   const elimByRound = {};
   let activeIds = new Set(runnable.map(a=>a.id));
+  const totalImprAll = runnable.reduce((s,a)=>s+a.impr, 0);
+  const aggressive = totalImprAll >= 10000;
+  const conservative = totalImprAll < 3000;
   const markElim = (arm, rule, detail) => {
     if(!activeIds.has(arm.id) || arm === best) return;
     activeIds.delete(arm.id);
     elimByRound[arm.id] = {rule, detail};
   };
-  ev.forEach(a=>{ if(a !== best && a.impr >= 50 && a.loseProb >= 0.95) markElim(a, '第1轮·95%把握落后', '第1轮：已有95%把握点击率低于当前好款'); });
-  ev.forEach(a=>{ if(a !== best && activeIds.has(a.id) && a.impr >= 50 && a.loseProb >= 0.90) markElim(a, '第2轮·90%把握落后', '第2轮：已有90%把握点击率低于当前好款'); });
+  if(observedDays >= 3){
+    const conf1 = aggressive ? 0.92 : (conservative ? 0.98 : 0.95);
+    const conf2 = aggressive ? 0.85 : (conservative ? 0.95 : 0.90);
+    ev.forEach(a=>{ if(a !== best && a.impr >= 50 && a.loseProb >= conf1) markElim(a, '第1轮·高置信淘汰', `第1轮：已有${(conf1*100).toFixed(0)}%把握点击率低于当前好款`); });
+    ev.forEach(a=>{
+      if(a !== best && activeIds.has(a.id) && a.impr >= 50){
+        const ctrGap = best && best.ctrMean > 0 ? (best.ctrMean - a.ctrMean) / best.ctrMean : 0;
+        const gapThresh = aggressive ? 0.4 : (conservative ? 0.6 : 0.5);
+        const confGap = aggressive ? 0.75 : (conservative ? 0.85 : 0.80);
+        if(ctrGap >= gapThresh && a.loseProb >= confGap){
+          markElim(a, '第1.5轮·差距过大', `后验CTR比好款低${(ctrGap*100).toFixed(0)}%，改进空间小`);
+        }
+      }
+    });
+    ev.forEach(a=>{ if(a !== best && activeIds.has(a.id) && a.impr >= 50 && a.loseProb >= conf2) markElim(a, '第2轮·中置信淘汰', `第2轮：已有${(conf2*100).toFixed(0)}%把握点击率低于当前好款`); });
+  }
   if(observedDays >= 4){
     const top5 = new Set(sortedByCtr.slice(0,5).map(a=>a.id));
     ev.forEach(a=>{ if(activeIds.has(a.id) && !top5.has(a.id)) markElim(a, '第3轮·保留前5', '第3轮：预算集中到后验CTR前5个候选'); });
@@ -759,16 +800,26 @@ function evaluate(arms, params){
     a.budget = a.status === 'stop' ? 0 : remainBudget;
     a.capped = remainBudget === 0;
 
+    // 预算分配按探索价值加权
+    if(a === best){
+      a.budgetShare = 0.40;
+    } else if(challengerIds.has(a.id)){
+      a.budgetShare = 0.30;
+    } else {
+      a.budgetShare = 0.30 / Math.max(1, runnable.filter(x=>!challengerIds.has(x.id) && x !== best && !elimByRound[x.id] && x.status !== 'stop').length);
+    }
+    a.budgetShare = Math.min(a.budgetShare, 1.0);
+
     if(a === best){
       a.status='go'; a.statusText='当前好款';
       a.action='保留'; a.actionDetail=`当前点击率后验最高，作为对比好款`;
       a.elimRule='—';
       a.suggestion='继续给量验证';
     } else if(a.isStuck){
-      a.status='stuck'; a.statusText='跑不动';
-      a.action='单独重测'; a.actionDetail='全站推广给量不足，暂不参与CTR淘汰';
-      a.elimRule='平台给量不足';
-      a.suggestion='提高出价、换计划或单独拉出测试';
+      a.status='stuck'; a.statusText='暂停重测';
+      a.action='暂停重新开一轮'; a.actionDetail=`测了${a.paidDays}天曝光仅${a.impr}，建议调整出价/计划后重测`;
+      a.elimRule='5天跑不动';
+      a.suggestion='暂停投放，提高出价或换计划，重新开一轮测试';
     } else if(elimByRound[a.id]){
       a.status='stop'; a.statusText='淘汰';
       a.action='关停'; a.actionDetail=elimByRound[a.id].detail;
@@ -827,7 +878,7 @@ function buildReason(a, params){
   } else if(a.status==='challenge'){
     parts.push(`，它是最强挑战者之一，预算应优先保留给它继续和当前好款对比`);
   } else if(a.status==='stuck'){
-    parts.push(`，全站推广给量不足，暂不参与CTR淘汰，建议单独重测或调整出价/计划`);
+    parts.push(`，测了${a.paidDays}天曝光仅${a.impr}，平台给量不足，建议暂停后调整出价/计划重新开一轮测试`);
   } else if(a.status==='try'){
     parts.push(`，样本未达到最小曝光 <b>${params.minImpr}</b>，先不淘汰`);
   } else {
@@ -873,7 +924,7 @@ function render(params){
     todoItems.push(`<div class="todo-item try"><div class="act">🟠 补曝光</div><div class="desc"><b>${tryy.length}</b> 个臂曝光不足 ${params.minImpr}，先不淘汰</div><div class="ids">${tryy.slice(0,3).map(a=>a.id).join('、')}${tryy.length>3?'...':''}</div></div>`);
   }
   if(stuck.length){
-    todoItems.push(`<div class="todo-item stuck"><div class="act">🟣 跑不动</div><div class="desc"><b>${stuck.length}</b> 个臂全站推广给量不足，不参与CTR淘汰</div><div class="ids">${stuck.slice(0,3).map(a=>a.id).join('、')}${stuck.length>3?'...':''}</div></div>`);
+    todoItems.push(`<div class="todo-item stuck"><div class="act">🟣 暂停重测</div><div class="desc"><b>${stuck.length}</b> 个臂测了5天曝光不足，建议暂停后调整出价/计划重新开一轮</div><div class="ids">${stuck.slice(0,3).map(a=>`${a.id}(${a.paidDays}天${a.impr}曝光)`).join('、')}${stuck.length>3?'...':''}</div></div>`);
   }
   if(!todoItems.length) todoItems.push(`<div class="todo-item"><div class="act">无数据</div><div class="desc">该分组无商品ID</div></div>`);
   $('todoGrid').innerHTML = todoItems.join('');
@@ -890,7 +941,7 @@ function render(params){
     <span>🟡挑战者: <b style="color:var(--cyan)">${challenge.length}</b></span>
     <span>🟡继续测: <b style="color:var(--cyan)">${wait.length}</b></span>
     <span>🟠补曝光: <b style="color:var(--amber)">${tryy.length}</b></span>
-    <span>🟣跑不动: <b style="color:#8b5cf6">${stuck.length}</b></span>
+    <span>🟣暂停重测: <b style="color:#8b5cf6">${stuck.length}</b></span>
     <span>🔴淘汰: <b style="color:var(--red)">${stop.length}</b></span>
     <span>总曝光: <b>${totalImpr}</b></span>
     <span>总点击: <b>${totalClicks}</b></span>
@@ -925,14 +976,17 @@ function render(params){
             <div><span class="k">曝光</span><span class="v">${a.impr}</span></div>
             <div><span class="k">点击</span><span class="v">${a.clicks}</span></div>
             <div><span class="k">实际CTR</span><span class="v">${isNaN(a.ctr)?'-':(a.ctr*100).toFixed(2)}%</span></div>
+            <div><span class="k">衰减CTR</span><span class="v" style="color:var(--cyan)">${isNaN(a.decayCtr)?'-':(a.decayCtr*100).toFixed(2)}%</span></div>
             <div><span class="k">后验CTR</span><span class="v">${(a.ctrMean*100).toFixed(2)}%</span></div>
             <div><span class="k">95%区间</span><span class="v">[${(a.ctrLo*100).toFixed(2)}%, ${(a.ctrHi*100).toFixed(2)}%]</span></div>
+            <div><span class="k">UCB</span><span class="v">${(a.ucb*100).toFixed(2)}%</span></div>
             <div><span class="k">低于好款</span><span class="v" style="color:${a.loseProb>=params.elimConfidence?'var(--red)':'var(--muted)'}">${(a.loseProb*100).toFixed(1)}%</span></div>
             <div><span class="k">当前好款</span><span class="v">${a.bestId||'-'}</span></div>
+            <div><span class="k">预算份额</span><span class="v">${((a.budgetShare||0)*100).toFixed(0)}%</span></div>
             <div><span class="k">花费</span><span class="v">${a.spend.toFixed(0)}元</span></div>
             <div><span class="k">剩余预算</span><span class="v">${a.budget.toFixed(0)}元</span></div>
             <div><span class="k">淘汰依据</span><span class="v" style="color:${a.elimRule&&a.elimRule!=='—'?'var(--red)':'var(--muted)'}">${a.elimRule||'—'}</span></div>
-            <div><span class="k">后验模型</span><span class="v">CTR Beta</span></div>
+            <div><span class="k">后验模型</span><span class="v">CTR Beta·时间衰减</span></div>
           </div>
           <div class="row">
             <div><span class="k">后台调整</span><span class="v" style="color:var(--amber);font-weight:700">${a.suggestion||'—'}</span></div>
@@ -1254,7 +1308,7 @@ $('runBtn').addEventListener('click', ()=>{
     group: $('group').value,
     testDays: parseInt($('testDays').value) || 7,
     perArmBudget: parseFloat($('perArmBudget').value) || 300,
-    elimConfidence: (parseFloat($('elimConfidence').value) || 95) / 100,
+    elimConfidence: 0.95,
     minImpr: parseFloat($('minImpr').value) || 100,
     reliableImpr: parseFloat($('minImpr').value) || 100,
     reliableClicks: 10,

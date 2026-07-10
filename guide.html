@@ -137,13 +137,13 @@
     <p>在测款场景里：</p>
     <ul>
       <li><strong>臂 (Arm)</strong> = 每一个商品ID</li>
-      <li><strong>拉臂 (Pull)</strong> = 花一次推广费</li>
-      <li><strong>奖励 (Reward)</strong> = ROI（投产比）</li>
-      <li><strong>目标</strong> = 用最少的钱，最快找到达标的款，淘汰不达标的款</li>
+      <li><strong>拉臂 (Pull)</strong> = 每一次曝光</li>
+      <li><strong>奖励 (Reward)</strong> = 点击（点击率 CTR）</li>
+      <li><strong>目标</strong> = 最小花费找到点击率最高的款</li>
     </ul>
 
     <div class="note">
-      核心思想：<strong>不是每款花一样的钱去测</strong>，而是快速淘汰差的、把钱集中给好的。
+      核心思想：<strong>先给每款一点曝光，然后用 CTR 后验置信度快速淘汰差款，把钱集中花在当前第一名和最可能超过第一名的候选款上。</strong>
     </div>
   </div>
 
@@ -157,39 +157,44 @@
       <tr>
         <th></th>
         <th>传统均匀分配</th>
-        <th>多臂老虎机</th>
+        <th>CTR多臂老虎机</th>
       </tr>
       <tr>
         <td><strong>预算分配</strong></td>
         <td>30款各100元/天</td>
-        <td>好款300元/天，差款0元</td>
+        <td>好款40%，挑战者30%，其余按需</td>
       </tr>
       <tr>
         <td><strong>淘汰时间</strong></td>
         <td>跑完7天再人工看</td>
-        <td>第3天自动淘汰</td>
+        <td>前2天保护，第3天起自适应淘汰</td>
       </tr>
       <tr>
         <td><strong>差款浪费</strong></td>
         <td>30款×7天都花钱</td>
-        <td>10款第3天就停了</td>
+        <td>曝光足够但CTR差的提前淘汰</td>
       </tr>
       <tr>
         <td><strong>好款数据量</strong></td>
         <td>每款100元/天，样本少</td>
-        <td>好款300元/天，样本多</td>
+        <td>预算集中，样本更可靠</td>
       </tr>
       <tr>
         <td><strong>决策依据</strong></td>
         <td>看"感觉"</td>
-        <td>统计检验，95%置信</td>
+        <td>CTR后验置信度，95%把握淘汰</td>
+      </tr>
+      <tr>
+        <td><strong>跑不动处理</strong></td>
+        <td>继续烧钱等数据</td>
+        <td>5天曝光不足→暂停重测</td>
       </tr>
     </table>
 
     <div class="note">
       <strong>省钱 = 三个维度</strong><br>
-      ① 少浪费 — 差款3天就停<br>
-      ② 多赚钱 — 好款提前拿到更多预算<br>
+      ① 少浪费 — 曝光足够但CTR差的提前淘汰<br>
+      ② 多赚钱 — 好款预算集中，数据更可靠<br>
       ③ 少误判 — 统计检验不会把好款误杀
     </div>
   </div>
@@ -298,49 +303,55 @@
   <h2><span class="ico" style="background:rgba(34,211,238,.15)">🧮</span> 算法原理</h2>
 
   <div class="card">
-    <h3>1. 高斯 NIG 后验 (Normal-Inverse-Gamma)</h3>
-    <p>每个商品ID的日ROI被视为从一个<strong>高斯分布</strong>中采样：</p>
-    <div class="formula">ROI_i ~ N(μ, σ²)</div>
-    <p>用 NIG 共轭先验在线更新后验，得到：</p>
+    <h3>1. Beta-Bernoulli 点击率后验</h3>
+    <p>每个商品ID的点击被视为从一个<strong>Beta分布</strong>中采样：</p>
+    <div class="formula">CTR ~ Beta(点击 + 1, 曝光 - 点击 + 1)</div>
+    <p>用 Beta 后验得到：</p>
     <ul>
-      <li><strong>后验均值 μ_n</strong>：ROI的最佳估计</li>
-      <li><strong>95%置信区间 [μ_n - t·scale, μ_n + t·scale]</strong>：ROI的不确定性范围</li>
-      <li><strong>P(ROI ≥ 目标)</strong>：达标概率，用于决策</li>
+      <li><strong>后验均值</strong>：点击率的最佳估计</li>
+      <li><strong>95%置信区间</strong>：点击率的不确定性范围</li>
+      <li><strong>P(CTR < 好款CTR)</strong>：落后好款概率，用于淘汰决策</li>
     </ul>
     <div class="note">
-      v3用Beta-Bernoulli只看"达标/不达标"，丢失了ROI幅度信息。v4的高斯后验保留了"超目标多少"的信息，决策更准确。
+      点击率比ROI更稳定、更早可判断。测款阶段先用点击率筛选"有吸引力"的款，后续再看ROI和转化。
     </div>
   </div>
 
   <div class="card">
     <h3>2. 时间衰减 (Exponential Decay)</h3>
-    <p>近期的数据权重更高，旧数据权重衰减：</p>
-    <div class="formula">w_t = exp(-λ × (T - t))&emsp;λ=0.15 ≈ 7天半衰期</div>
-    <p>这样如果某款前几天ROI好但最近变差，算法不会被旧数据"掩护"。</p>
+    <p>近期的点击数据权重更高，旧数据权重衰减：</p>
+    <div class="formula">w_t = exp(-0.15 × 天数差)&emsp;7天前数据权重≈25%</div>
+    <p>这样如果某款前几天点击好但最近变差，算法不会被旧数据"掩护"。</p>
   </div>
 
   <div class="card">
-    <h3>3. CR 连续淘汰 (Continuous Rejects, NeurIPS 2024)</h3>
-    <p>当多个款都有足够样本时，比较它们的置信区间：</p>
-    <div class="formula">若 bestHi(其他臂上界) - postLo(当前臂下界) > threshold → 淘汰当前臂</div>
-    <p>threshold 由统计显著性 δ=0.05 控制，保证误杀率 ≤5%。</p>
-    <div class="warn">
-      当数据量少（<14天）时，CI极宽，CR判定会很保守，大部分款会被归为"继续测"。这是正确行为——数据不够就不乱判。
+    <h3>3. UCB 挑战者识别</h3>
+    <p>不只看后验点击率，还考虑不确定性：</p>
+    <div class="formula">UCB = 后验均值 + 1.96 × sqrt(后验方差 / 曝光)</div>
+    <p>UCB高的款是"最有探索价值"的候选，可能超过当前好款。</p>
+    <div class="note">
+      预算优先给当前好款和挑战者，而不是平均分配。
     </div>
   </div>
 
   <div class="card">
-    <h3>4. 方差自适应预算分配 (UAI 2023)</h3>
-    <p>预算按"胜率×不确定性"分配：</p>
-    <div class="formula">budget_i = B × [p_i × (1-p_i)] / Σ[p_j × (1-p_j)]</div>
-    <p>越不确定的款分配越多预算（因为更需要数据），已经确定好/差的款预算减少。</p>
+    <h3>4. 分轮淘汰 + 7天终局</h3>
+    <p>淘汰按数据量自适应调整：</p>
+    <ul>
+      <li><strong>总曝光 ≥ 10000</strong>：更激进（置信度阈值降低）</li>
+      <li><strong>总曝光 < 3000</strong>：更保守（置信度阈值提高）</li>
+      <li><strong>前2天</strong>：冷启动保护，不轻易淘汰</li>
+      <li><strong>第3天起</strong>：按置信度淘汰</li>
+      <li><strong>7天后</strong>：终局，只保留后验CTR最高款</li>
+    </ul>
   </div>
 
   <div class="card">
-    <h3>5. 漂移检测 (Drift Detection)</h3>
-    <p>比较近3天和之前数据的ROI均值：</p>
-    <div class="formula">若 |ROI_近3天 - ROI_之前| > 0.5 → 检测到漂移</div>
-    <p>漂移时算法会降低旧数据权重，防止因环境变化（如大促日）误判。</p>
+    <h3>5. 跑不动单独处理</h3>
+    <p>测了5天曝光不足的款，不参与CTR淘汰，建议暂停后调整出价/计划重新开一轮。</p>
+    <div class="warn">
+      全站推广下很多款不是"点击差"，而是"平台不给量"。跑不动的款需要单独处理。
+    </div>
   </div>
 
   <!-- ========== Section 5: Tutorial ========== -->
@@ -441,7 +452,24 @@
   <h2><span class="ico" style="background:rgba(34,211,238,.15)">📄</span> 参考论文 · 小白解读</h2>
 
   <div class="card">
-    <h3>1. Thompson Sampling — "抛硬币做决策"</h3>
+    <h3>1. Best Arm Identification — "最小花费找最好款"</h3>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <span class="chip cyan">ICML 2016</span>
+      <a href="https://arxiv.org/abs/1602.04589" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
+    </div>
+    <p><strong>论文</strong>：Kaufmann et al., "Optimal Best Arm Identification with Fixed Confidence", ICML 2016</p>
+    <p><strong>小白解读</strong>：</p>
+    <div class="note">
+      你有30个款要测，想知道哪个点击率最高。<br>
+      传统做法：每个款花一样多钱，7天后看结果。<br>
+      Best Arm Identification：先给每款一点曝光，快速淘汰明显差的，把预算集中给"当前第一"和"最可能超过第一"的候选。<br><br>
+      <strong>核心思想</strong>：不要平均分配预算，把钱花在值得探索的款上。
+    </div>
+    <p><strong>在本项目中</strong>：用CTR后验置信度淘汰差款，预算优先给当前好款和挑战者。</p>
+  </div>
+
+  <div class="card">
+    <h3>2. Thompson Sampling — "抛硬币做决策"</h3>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
       <span class="chip cyan">NeurIPS 2011</span>
       <a href="https://proceedings.neurips.cc/paper/2011/hash/e53a0a2978c28872a4505bdb51dbb1b0-Abstract.html" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
@@ -451,102 +479,75 @@
     <div class="note">
       想象你有3台老虎机，不知道哪台中奖率高。你每台都试几次，然后"按概率"选下一台——<br>
       A机中奖率可能是70%（也可能是50%），你就70%的概率选A。<br><br>
-      这就是Thompson Sampling：用<strong>概率</strong>代替<strong>赌注</strong>。不确定的时候多探索，确定的时候就集中。比"贪心"（永远选当前最好的）更聪明，比"均匀试"（每台花一样多）更高效。
+      这就是Thompson Sampling：用<strong>概率</strong>代替<strong>赌注</strong>。不确定的时候多探索，确定的时候就集中。
     </div>
-    <p><strong>在本项目中</strong>：每个商品ID的后验分布给出"P(ROI达标)"，我们用它来决定预算分配——达标概率高的多分钱，概率低的少分钱。</p>
+    <p><strong>在本项目中</strong>：从Beta后验里抽样，得到每个款的Thompson值，用于排序和选择挑战者。</p>
   </div>
 
   <div class="card">
-    <h3>2. CR 连续淘汰 — "比不过就走人"</h3>
+    <h3>3. 冷启动与动态先验 — "新款不要从零开始"</h3>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-      <span class="chip cyan">NeurIPS 2024</span>
-      <a href="https://proceedings.neurips.cc/paper/2024/hash/cr-continuous-rejects" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
+      <span class="chip cyan">Roblox 2025</span>
+      <a href="https://arxiv.org/html/2602.00943v1/" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
     </div>
-    <p><strong>论文</strong>：Wang et al., "Continuous Rejects for Multi-Armed Bandits", NeurIPS 2024</p>
+    <p><strong>论文</strong>："Dynamic Prior Thompson Sampling for Cold-Start Exploration", 2025</p>
     <p><strong>小白解读</strong>：</p>
     <div class="note">
-      10个人赛跑，你不需要等所有人跑完才知道谁不行。<br>
-      如果跑了一半，某人的速度"就算后面冲刺也不可能追上前3名"——那他就可以提前出局了。<br><br>
-      CR淘汰就是做这件事：看每个款的<strong>置信区间</strong>（可能最好的成绩 vs 可能最差的成绩），如果某款"可能最好的成绩"都比不上别人"可能最差的成绩"，那它就没必要再测了。<br><br>
-      关键优势：不是"一刀切"，而是<strong>连续地</strong>判断——每来一天新数据就重新评估，够判就判，不够就等。
+      新上架的款没有历史数据，直接判断会误杀。<br>
+      动态先验：给新款一个"初始期望"，而不是从零开始。随着数据积累，逐步更新先验。<br><br>
+      <strong>在本项目中</strong>：前2天冷启动保护，不轻易淘汰。曝光不足的款继续观察，不给强判断。
     </div>
-    <p><strong>在本项目中</strong>：当多个款都有足够样本时，比较置信区间。如果款B的CI下界远低于款A的CI上界 → 款B被CR淘汰。</p>
   </div>
 
   <div class="card">
-    <h3>3. 方差自适应预算 — "越不确定越要探"</h3>
+    <h3>4. Hyperband / Successive Halving — "分轮淘汰"</h3>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-      <span class="chip cyan">UAI 2023</span>
-      <a href="https://auai.org/uai2023/proceedings" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
+      <span class="chip cyan">ICLR 2017</span>
+      <a href="https://ar5iv.labs.arxiv.org/html/1603.06560" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
     </div>
-    <p><strong>论文</strong>：Lalitha et al., "Scalable Thompson Sampling with Variance Adaptation", UAI 2023</p>
+    <p><strong>论文</strong>：Li et al., "Hyperband: A Novel Bandit-Based Approach to Hyperparameter Optimization", ICLR 2017</p>
     <p><strong>小白解读</strong>：</p>
     <div class="note">
-      你有两个款：<br>
-      - 款A：测了7天，ROI稳定在1.8-2.0之间（很确定）<br>
-      - 款B：测了3天，ROI一天0.5一天3.5（完全不确定）<br><br>
-      纯Thompson Sampling会基于P(达标)分配预算，款A概率高→多分钱。但款B才是<strong>最需要数据</strong>的——它的真实ROI可能很好也可能很差，不给它预算就永远不知道。<br><br>
-      方差自适应就是：给"不确定"的款额外加点预算，让它赶紧积累数据。不确定度 = p×(1-p)，刚好50%概率时最需要探索。
+      先广撒网，快速砍掉差的，再把预算集中给少数候选。<br><br>
+      比如：30个款 → 第1轮淘汰20个 → 第2轮淘汰5个 → 第3轮只留3个 → 终局只留1个。<br><br>
+      <strong>关键优势</strong>：不是等满7天才判断，而是每轮都评估，够判就判。
     </div>
-    <p><strong>在本项目中</strong>：预算分配公式 budget_i ∝ p_i × (1-p_i)，不确定的款自动拿到更多预算。</p>
+    <p><strong>在本项目中</strong>：分轮淘汰逻辑——第1轮95%置信淘汰，第2轮90%置信淘汰，第3轮保留前5，第4轮保留前3，第5轮终局只留第1。</p>
   </div>
 
   <div class="card">
-    <h3>4. 非平稳环境处理 — "游戏规则在变"</h3>
+    <h3>5. 时间衰减 — "旧数据忘掉"</h3>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-      <span class="chip cyan">NeurIPS 2025</span>
-      <a href="https://neurips.cc/virtual/2025/poster/confee-nsmab" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
+      <span class="chip cyan">经典方法</span>
     </div>
-    <p><strong>论文</strong>：CONFEE-NSMAB, "Non-Stationary Multi-Armed Bandits with Feedback Constraints", NeurIPS 2025</p>
-    <p><strong>小白解读</strong>：</p>
+    <p><strong>核心思想</strong>：</p>
     <div class="note">
-      传统老虎机假设中奖率不变，但电商不是——<br>
-      - 大促期间ROI暴涨<br>
-      - 竞品降价后你的ROI暴跌<br>
-      - 换了主图/标题后整个商品的表现变了<br><br>
-      如果算法不知道环境变了，就会用旧数据做错误判断。<br><br>
-      两个对策：<br>
-      <strong>时间衰减</strong>：7天前的数据权重是今天的一半，自然"忘掉"旧环境<br>
-      <strong>漂移检测</strong>：如果最近3天的ROI突然和之前差异很大（>0.5），标记"检测到漂移"，提醒你环境变了
+      点击率每天会波动，前几天的数据可能已经不能反映当前状态。<br><br>
+      时间衰减：让近期数据权重更高，旧数据权重衰减。<br>
+      比如7天前的数据权重只有25%，今天的数据权重100%。<br><br>
+      <strong>公式</strong>：weight = exp(-0.15 × 天数差)
     </div>
-    <p><strong>在本项目中</strong>：λ=0.15的时间衰减 + 漂移检测。页面会显示"环境漂移: 已检测/未检测"。</p>
+    <p><strong>在本项目中</strong>：点击和曝光按时间加权，后验CTR更能反映最近表现。</p>
   </div>
 
   <div class="card">
-    <h3>5. 方差膨胀 — "极端值别慌"</h3>
+    <h3>6. 全站推广与流量分配 — "平台不给量怎么办"</h3>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-      <span class="chip cyan">NeurIPS 2025</span>
-      <a href="https://neurips.cc/virtual/2025/poster/ts-vi" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
+      <span class="chip cyan">COLT 2024</span>
+      <a href="https://arxiv.org/html/2301.13306v3/" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
     </div>
-    <p><strong>论文</strong>：TS-VI, "Adaptive Variance Inflation in Thompson Sampling", NeurIPS 2025</p>
+    <p><strong>论文</strong>："Autobidders with Budget and ROI Constraints", COLT 2024</p>
     <p><strong>小白解读</strong>：</p>
     <div class="note">
-      电商的ROI数据有个大问题：<strong>极端值特别多</strong>。<br>
-      一天ROI=0（没出单），下一天ROI=5（出了一个利润高的单），这种"重尾分布"会让标准Thompson Sampling过度自信——以为自己很确定，其实只是运气好/差。<br><br>
-      方差膨胀就是：遇到数据波动大的时候，主动<strong>放大不确定性</strong>，让自己更谨慎。不确定→多探索→少犯错。
+      全站推广下，很多款不是"点击差"，而是"平台不给量"。<br><br>
+      出价、预算、ROI约束都会影响平台给多少流量。<br>
+      如果某款测了5天还拿不到曝光，不应该判定为"差款"，而是建议调整出价/计划重新开一轮。<br><br>
+      <strong>在本项目中</strong>：跑不动的款单独处理，不参与CTR淘汰，建议暂停重测。
     </div>
-    <p><strong>在本项目中</strong>：NIG后验自然处理了重尾——当S（样本方差）大时，后验的σ²也会大，CI变宽，判定更保守。</p>
-  </div>
-
-  <div class="card">
-    <h3>6. 聚类老虎机 — "同类商品共享经验"</h3>
-    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-      <span class="chip cyan">ICML 2025</span>
-      <a href="https://icml.cc/virtual/2025/poster/clustered-bandits" target="_blank" style="font-family:var(--mono);font-size:11px;color:var(--cyan)">🔗 原文链接</a>
-    </div>
-    <p><strong>论文</strong>：Cl-BAI, "Clustered Bandits for Best Arm Identification", ICML 2025</p>
-    <p><strong>小白解读</strong>：</p>
-    <div class="note">
-      30个款要测，但如果其中5个是同类目（比如都是纸杯），它们的表现可能很相似。<br><br>
-      普通MAB把它们当完全独立的30个臂来测——每个都要从零开始学。<br>
-      聚类MAB先发现"这5个纸杯是一类的"，然后<strong>共享数据</strong>——测了1个纸杯的表现，其他4个也获得了先验知识。<br><br>
-      好处：新上架的款不用从零开始测，同类目兄弟款的数据就是它的"起跑线"。
-    </div>
-    <p><strong>在本项目中</strong>：当前未实现聚类（需要类目信息）。这是未来的优化方向——当你有多个同类目商品时，冷启动速度可以提升3-5倍。</p>
   </div>
 
   <div class="warn" style="margin-top:8px">
-    <strong>💡 论文阅读建议</strong>：如果你不是算法研究人员，不需要读懂论文原文。上面的"小白解读"已经把每篇论文的核心思想翻译成了测款场景。关键是理解：<strong>为什么要这样做</strong>，而不是<strong>数学公式怎么推导</strong>。
+    <strong>💡 论文阅读建议</strong>：上面的"小白解读"已经把每篇论文的核心思想翻译成了测款场景。关键是理解<strong>为什么要这样做</strong>：先给每款一点曝光，快速淘汰差款，把预算集中给当前好款和挑战者。
   </div>
 
   <!-- Back -->
