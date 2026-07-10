@@ -382,7 +382,7 @@ function aggregate(rows, group, params){
   const byId = {};
   sub.forEach(r=>{
     const id = String(r[COLS.id]||'').trim();
-    if(!id) return;
+    if(!id || id === '-' || String(r[COLS.date]||'').includes('总计')) return;
     if(!byId[id]) byId[id] = {id, name:String(r[COLS.name]||'').trim(), daily:{}, targetRoi:NaN};
     const p = byId[id];
     if(!isNaN(parseRoi(r[COLS.bid]))) p.targetRoi = parseRoi(r[COLS.bid]);
@@ -711,6 +711,7 @@ function evaluate(arms, params){
       ctrBeta: beta,
       ctrSamples: samples,
       ctrMean: mean,
+      ctrScore: a.impr > 0 ? a.clicks / a.impr : 0,
       ctrLo: q(0.025),
       ctrHi: q(0.975),
       ts: samples[Math.floor(seededRng(armSeed + 99)() * sampleN)],
@@ -729,7 +730,8 @@ function evaluate(arms, params){
   });
   const runnable = ev.filter(a => !a.isStuck);
   const candidates = runnable.filter(a => a.impr >= minImpr);
-  const best = (candidates.length ? candidates : (runnable.length ? runnable : ev)).slice().sort((a,b)=>b.ctrMean-a.ctrMean)[0];
+  // 当前好款按实际CTR优先，避免低曝光样本被 Beta 先验抬高后误判为好款
+  const best = (candidates.length ? candidates : (runnable.length ? runnable : ev)).slice().sort((a,b)=>(b.ctrScore-a.ctrScore)||(b.impr-a.impr))[0];
   const observedDays = Math.max(...ev.map(a => a.totalDays || 0), 0);
   const finalMode = observedDays >= (params.testDays || 7);
   ev.forEach(a => {
@@ -741,7 +743,7 @@ function evaluate(arms, params){
     a.loseProb = loseProb;
     a.winProb = best && a === best ? 1 : 1 - loseProb;
   });
-  const sortedByCtr = [...runnable].sort((a,b)=>b.ctrMean-a.ctrMean);
+  const sortedByCtr = [...runnable].sort((a,b)=>(b.ctrScore-a.ctrScore)||(b.impr-a.impr));
   const sortedByUcb = [...runnable].filter(a=>a !== best).sort((a,b)=>{
     const ucbA = a.ctrMean + 1.96 * Math.sqrt(a.ctrMean * (1 - a.ctrMean) / Math.max(a.impr, 1));
     const ucbB = b.ctrMean + 1.96 * Math.sqrt(b.ctrMean * (1 - b.ctrMean) / Math.max(b.impr, 1));
@@ -859,7 +861,7 @@ function evaluate(arms, params){
   ev.forEach(a=>delete a.ctrSamples);
 
   const order={go:0,challenge:1,wait:2,try:3,stuck:4,stop:5};
-  ev.sort((a,b)=>(order[a.status]-order[b.status])||(b.ctrMean-a.ctrMean));
+  ev.sort((a,b)=>(order[a.status]-order[b.status])||(b.ctrScore-a.ctrScore)||(b.impr-a.impr));
   return ev;
 }
 
@@ -1096,8 +1098,8 @@ function renderTrendTable(){
   head.innerHTML = headHtml;
 
   // 表体
-  const lightMap={go:'light go',wait:'light wait',try:'light try',stop:'light stop'};
-  const textMap={go:'当前好款',wait:'继续测',try:'补曝光',stop:'淘汰'};
+  const lightMap={go:'light go',challenge:'light wait',wait:'light wait',try:'light try',stuck:'light try',stop:'light stop'};
+  const textMap={go:'当前好款',challenge:'挑战者',wait:'继续测',try:'补曝光',stuck:'暂停重测',stop:'淘汰'};
   let bodyHtml = rows.map(r=>{
     let h = `<tr>
       <td class="id-cell"><div class="id-name">${r.id}</div><div class="nm" title="${r.name}">${r.name||'(无名称)'}</div></td>
@@ -1112,11 +1114,23 @@ function renderTrendTable(){
         });
         h += `<td>${sparkline(values, m.color)}</td>`;
       } else {
-        // 折叠: 显示合计/最新值 + sparkline
+        // 折叠: 显示加权平均 + sparkline
         let agg;
-        if(m.key==='ctr' || m.key==='cvr' || m.key==='roi'){
-          // 比率类: 显示最近一天值
-          agg = values.length ? values[values.length-1] : 0;
+        if(m.key==='ctr'){
+          // CTR: 加权平均 (总点击/总曝光)
+          const totalClicks = r.dates.reduce((s,d)=>s+d.clicks,0);
+          const totalImpr = r.dates.reduce((s,d)=>s+d.impr,0);
+          agg = totalImpr>0 ? totalClicks/totalImpr : 0;
+        } else if(m.key==='cvr'){
+          // CVR: 加权平均 (总成交/总点击)
+          const totalDeals = r.dates.reduce((s,d)=>s+d.deals,0);
+          const totalClicks = r.dates.reduce((s,d)=>s+d.clicks,0);
+          agg = totalClicks>0 ? totalDeals/totalClicks : 0;
+        } else if(m.key==='roi'){
+          // ROI: 加权平均 (总GMV/总花费)
+          const totalGmv = r.dates.reduce((s,d)=>s+d.gmv,0);
+          const totalSpend = r.dates.reduce((s,d)=>s+d.spend,0);
+          agg = totalSpend>0 ? totalGmv/totalSpend : 0;
         } else {
           // 累计类: 显示合计
           agg = values.reduce((s,v)=>s+v,0);
@@ -1127,6 +1141,7 @@ function renderTrendTable(){
     h += '</tr>';
     return h;
   }).join('');
+
 
   // 汇总行: 每个指标每日合计
   bodyHtml += '<tr class="sum-row"><td colspan="2" style="text-align:right">📊 全款合计 →</td>';
@@ -1155,15 +1170,42 @@ function renderTrendTable(){
         bodyHtml += `<td class="num">${cnt?m.fmt(sum):'—'}</td>`;
       });
       const totals = allDates.map(dt=>{
-        if(m.key==='ctr'||m.key==='cvr'||m.key==='roi') return 0;
+        if(m.key==='ctr'){
+          let clicks=0, impr=0;
+          rows.forEach(r=>{const i=r.dates.findIndex(d=>d.date===dt); if(i>=0){clicks+=r.dates[i].clicks; impr+=r.dates[i].impr;}});
+          return impr>0 ? clicks/impr : 0;
+        }
+        if(m.key==='cvr'){
+          let deals=0, clicks=0;
+          rows.forEach(r=>{const i=r.dates.findIndex(d=>d.date===dt); if(i>=0){deals+=r.dates[i].deals; clicks+=r.dates[i].clicks;}});
+          return clicks>0 ? deals/clicks : 0;
+        }
+        if(m.key==='roi'){
+          let gmv=0, spend=0;
+          rows.forEach(r=>{const i=r.dates.findIndex(d=>d.date===dt); if(i>=0){gmv+=r.dates[i].gmv; spend+=r.dates[i].spend;}});
+          return spend>0 ? gmv/spend : 0;
+        }
         return rows.reduce((s,r)=>{const i=r.dates.findIndex(d=>d.date===dt); return s+(i>=0?r.dates[i][m.key]:0);},0);
       });
       bodyHtml += `<td>${sparkline(totals, m.color)}</td>`;
     } else {
-      // 折叠: 合计
+      // 折叠: 合计 (加权平均)
       let agg;
-      if(m.key==='ctr'||m.key==='cvr'||m.key==='roi'){
-        agg = 0;
+      if(m.key==='ctr'){
+        // CTR: 全款加权平均 (总点击/总曝光)
+        let totalClicks=0, totalImpr=0;
+        rows.forEach(r=>{totalClicks+=r.dates.reduce((s,d)=>s+d.clicks,0); totalImpr+=r.dates.reduce((s,d)=>s+d.impr,0);});
+        agg = totalImpr>0 ? totalClicks/totalImpr : 0;
+      } else if(m.key==='cvr'){
+        // CVR: 全款加权平均 (总成交/总点击)
+        let totalDeals=0, totalClicks=0;
+        rows.forEach(r=>{totalDeals+=r.dates.reduce((s,d)=>s+d.deals,0); totalClicks+=r.dates.reduce((s,d)=>s+d.clicks,0);});
+        agg = totalClicks>0 ? totalDeals/totalClicks : 0;
+      } else if(m.key==='roi'){
+        // ROI: 全款加权平均 (总GMV/总花费)
+        let totalGmv=0, totalSpend=0;
+        rows.forEach(r=>{totalGmv+=r.dates.reduce((s,d)=>s+d.gmv,0); totalSpend+=r.dates.reduce((s,d)=>s+d.spend,0);});
+        agg = totalSpend>0 ? totalGmv/totalSpend : 0;
       } else {
         agg = rows.reduce((s,r)=>s+r.dates.reduce((ss,d)=>ss+d[m.key],0),0);
       }
